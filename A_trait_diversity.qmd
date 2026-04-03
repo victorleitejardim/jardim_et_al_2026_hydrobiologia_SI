@@ -1,0 +1,678 @@
+---
+title: "Supplementary Information: Annex A – Polychaete trait diversity"
+subtitle: "Jardim et al. (2026). Trait-based insights into complexity–diversity relationships: different habitat complexity components drive niche diversity and community size. Hydrobiologia."
+crossref:
+  fig-prefix: Figure\ A
+  fig-title: Figure\ A
+  subref-labels: alpha a
+  thm-prefix: Figure
+  thm-title: Figure
+  tbl-prefix: Table\ A
+  tbl-title: Table\ A
+format:
+  pdf:
+    documentclass: scrartcl
+    papersize: letter
+    mainfont: Times New Roman 
+    sansfont: Arial
+    fontsize: 12pt   
+    geometry: margin=1in
+    fig-height: 4
+    fig-width: 6.5    
+    fig-pos: "H"
+    colorlinks: true
+    urlcolor: red
+    toc: true
+editor: source
+execute: 
+  cache: refresh
+bibliography: bibliography.bib
+---
+
+```{r}
+#| include: false
+library(targets)
+library(dplyr)
+library(tidyr)
+library(ggExtra)
+library(paletteer)
+library(vegan)
+library(BAT)
+library(mFD)
+library(tibble)
+library(ade4)
+library(adegraphics)
+library(ggplot2)
+library(patchwork)
+library(ggrepel)
+library(plotly)
+library(sf)
+library(tmap)
+library(lme4)
+library(jtools)
+library(sandwich)
+library(fixest)
+library(broom)
+library(lmtest)
+library(pbkrtest)
+library(lavaan)
+library(piecewiseSEM)
+library(emmeans)
+library(DiagrammeR)
+library(stringr)
+library(ggfortify)
+library(car)
+library(reshape)
+library(patchwork)
+
+set.seed(1)
+```
+
+## Traits and trait categories
+
+Information on ten functional traits divided into 45 categories for 330 local taxa was already available [@boye_trait-based_2019; @toumi_influence_2023]. Species were scored for each trait modality based on their affinity using a fuzzy coding approach, thoroughly described in Boyé et al. (2019). In this study, only traits with information for all observed taxa were selected. Additionally, for each trait, only trait categories found for at least one taxon were kept, resulting in a final dataset with seven functional traits divided into 33 modalities for 191 species. The traits characterised bioturbation potential, feeding ecology, mobility, maximum size and living habit (@tbl-traits).
+
+```{r}
+#| tbl-cap: Traits and trait categories used to built the regional trait space. Abreviations shown in the top panel of figure 1 (main text) are also shown.
+#| echo: false
+#| label: tbl-traits
+
+
+traitlist <- read.csv2("data/trait.list.csv") %>% 
+  rename_with(.fn = str_to_sentence,
+              .cols = everything()) %>% 
+  dplyr::rename(Categories = Modalites) %>% 
+  mutate(across(.cols = Traits:Categories,
+                .fns = str_to_sentence),
+         Abreviations = tolower(Abreviations)) %>% 
+  filter(!Abreviations %in% c("bioturb_r"),
+         !Traits %in% c("Sexual diff",
+                        "Reproduction freq",
+                        "Reproduction",
+                        "Life span")
+         ) %>% 
+  mutate(Traits = ifelse(duplicated(Traits), " ", Traits))
+
+knitr::kable(traitlist)
+```
+
+<!---->
+
+## Regional trait space quality
+
+Following the workflow proposed by @magneville_mfd_2021, the ideal number of dimensions used to define the reduced functional space was chosen to minimise the mean absolute deviation between species pairwise distances (mad) while keeping the least amount of dimensions possible [@maire_how_2015]. The regional polychaete trait space was built on 5 dimensions (mad = 0.03), from which functional indices were calculated (@fig-qsfp).
+
+```{r}
+#| fig-height: 6.5
+#| warning: false
+#| message: false
+#| echo: false
+#| fig-cap: Trait space quality according to the number of principal coordinate dimensions based on the absule deviance of euclidean distances.
+#| label: fig-qsfp
+
+tar_load(qfsp)
+quality.fspaces.plot(fspaces_quality = qfsp,
+                     fspaces_plot = rownames(qfsp$quality_fspaces)[3:6],quality_metric = "mad")
+```
+
+```{r}
+#| fig-height: 6.5
+#| warning: false
+#| message: false
+#| echo: false
+#| label: fig-traitspace
+#| fig-cap: Regional trait space (figure 1 – main text). First two axes of the regional polychaete trait space. Arrows (fitted vectors) show the correlation of each trait category to the first two axes. Arrow (lengths and widths) and names are sized according to the squared coefficient of correlation for each category. Black and gray arrows represent significant and nonsignificant correlations, respectively
+
+tar_load(ptraits)
+tar_load(gdis)
+tar_load(poly)
+ppcoa <- vegan::wcmdscale(sqrt(gdis), k = 5, eig = TRUE)
+var_axes <- round(ppcoa$eig[ppcoa$eig > 0]/sum(ppcoa$eig[ppcoa$eig > 0])*100,2)
+pcoaxes <- scores(ppcoa) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("sp") %>%
+  left_join(poly %>%
+              select(sp, genus)) %>%
+  distinct(sp, .keep_all = TRUE) %>%
+  mutate(colour = NA,
+    colour = as.factor(
+    case_when(
+      sp == "Hesione splendida" ~ "a",
+      sp == "Polycirrus pennarbedae" ~ "b",
+      sp == "Branchiomma bombyx" ~ "c",
+      sp == "Glycera lapidum" ~ "d",
+      is.na(colour) ~ "e"
+    )
+  ))
+pcoarr <- as.data.frame(scores(envfit(ppcoa, ptraits), "vectors")) %>%
+  mutate(r2 = envfit(ppcoa, ptraits)[["vectors"]]$r,
+         p = envfit(ppcoa, ptraits)[["vectors"]]$pvals,
+         sig = ifelse(p < .05, "significant", "nonsignificant"))
+(p_ts <- ggplot() +
+  geom_vline(xintercept = 0,
+             linetype = 2) + 
+  geom_hline(yintercept = 0,
+             linetype = 2) + 
+  ggpubr::stat_chull(
+    data = pcoaxes,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+    ),
+    colour = "gray45",
+    fill = "gray45",
+    geom = "polygon",
+    alpha = .1,
+    linewidth = .6
+  )+
+  geom_point(
+    data = pcoaxes,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      colour = colour
+    ),
+    colour = "gray45",
+    alpha = .8
+  ) +
+  geom_segment(data = pcoarr %>% filter(sig == "significant"),
+               aes(x = 0,
+                   y = 0,
+                   xend = Dim1,
+                   yend = Dim2,
+                   linewidth = sqrt(r2)),
+               arrow = arrow(length = unit(0.30, "cm")))+
+  ggrepel::geom_text_repel(data = pcoarr %>% filter(sig == "significant"),
+                           aes(x = Dim1,
+                               y = Dim2,
+                               label = rownames(pcoarr %>% filter(sig == "significant")),
+                              size = sqrt(r2)),
+                           inherit.aes = FALSE)+
+  scale_linewidth_continuous(range = c(0.25,1))+
+  scale_size_continuous(range = c(2.8,4.2))+
+  scale_x_continuous(limits = c(-.9,.9), expand = FALSE)+
+  scale_y_continuous(limits = c(-.9,.9), expand = FALSE)+
+  theme_light()+
+  labs(x = paste("Dim 1 :", var_axes[1], "%", sep = " "),
+       y = paste("Dim 2 :", var_axes[2], "%", sep = " "))+
+  theme(text = element_text(size = 11),
+        aspect.ratio = 1,
+        panel.background = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "none"
+        ))
+# ggsave("fig1_regionaltraitspace.svg", p_ts, height = 210, width = 210, units = "mm", device =  svglite::svglite)
+```
+
+## Regional and local trait variability
+
+When all observations at a site over time are considered, most trait syndromes are present across all beds. Each site represents at least 60 % of the regional trait pool being represented and the most functionally rich site occupying 85 % of the 5-dimensional trait space (subplots in Figure 2 – main ).
+
+```{r}
+#| fig-height: 6.5
+#| warning: false
+#| message: false
+#| echo: false
+
+tar_load(ptraits)
+tar_load(poly)
+tar_load(polysamples)
+tar_load(pdens)
+tar_load(pal)
+
+library(reshape)
+poly <- poly %>% 
+  left_join(polysamples) %>% 
+  mutate(n = as.numeric(n),
+         n = n/(count*0.3),
+         site = as.factor(site))
+poly <- cast(poly, formula = site~sp, value = 'n', fun.aggregate = sum) %>% 
+  column_to_rownames("site") %>%
+  decostand(., method = "hellinger") %>% 
+  rownames_to_column("site")
+poly <- melt(poly, variable_name = "sp")
+
+poly <- poly %>%
+  mutate(site = as.factor(site)) %>%
+  group_by(site,sp) %>%
+  summarise(n = sum(value)) %>%
+  ungroup() 
+df <- data.frame()
+for (i in levels(poly$site)) {
+    df_i <- poly %>%
+      filter(site == i) %>%
+      filter(n > 0) %>%
+      select(sp, site, n) %>% 
+      left_join(pcoaxes)
+  df <- rbind(df, df_i)
+  df
+}
+
+df <- df %>%
+  mutate(AZ1 = n*Dim1,
+         AZ2 = n*Dim2) %>% 
+  group_by(site) %>%
+  mutate(C1 = sum(AZ1)/sum(n),
+         C2 = sum(AZ2)/sum(n)) %>% 
+  ungroup()
+  
+  
+p1 <- ggplot() +
+  geom_vline(xintercept = 0,
+             linetype = 2) + 
+  geom_hline(yintercept = 0,
+             linetype = 2) + 
+  ggpubr::stat_chull(
+    data = pcoaxes,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+    ),
+    colour = "gray",
+    fill = NA,
+    geom = "polygon",
+    alpha = .5,
+    linewidth = .6
+  )+
+  geom_point(
+    data = pcoaxes,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2
+    ),
+    colour = "gray",
+    shape = 1,
+    alpha = .9
+  ) +
+  ggpubr::stat_chull(
+    data = df,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      fill = site,
+      colour = site,
+    ),
+    geom = "polygon",
+    alpha = .1,
+    linetype = 2,
+    linewidth = .4
+  ) +
+   geom_segment(
+    data = df,
+    aes(
+      x = C1,
+      y = C2,
+      xend = Dim1,
+      yend = Dim2,
+      colour = site
+      ),
+    linetype = 2,
+    linewidth = .2,
+    alpha = .5) +
+  geom_point(
+    data = df,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      colour = site,
+      # shape = year,
+      size = n
+    ),
+    alpha = .9
+  ) +
+    geom_point(
+    data = df,
+    mapping = aes(
+      x = C1,
+      y = C2,
+      # shape = year
+    ),
+    alpha = .9,
+    size = 2,
+    colour = "black"
+  ) +
+  scale_color_manual(values = pal)+
+  scale_fill_manual(values = pal)+
+  theme_light() +
+  theme(aspect.ratio = 1, panel.grid = element_blank())+
+  facet_wrap(facets =  vars(site), nrow = 2)
+
+```
+
+```{r}
+#| fig-width: 9.75
+#| fig-height: 6
+#| fig-cap: Regional polychaete functional diversity in coralline algal beds from Brittany, France (subplots in figure 2 – main text). Subplots represent the two first dimensions of the trait space with light grey polygons indicating the global functional space and empty circles the species in the regional pool. Overlaid coloured polygons represent the trait space occupied by species found at a given site over time, with filled coloured circles indicating the functional entities (i.e. unique combinations of traits) represented by these species, sized according to their Hellinger-transformed total densities at the site across all years.
+#| warning: false
+#| message: false
+#| echo: false
+tar_load(polysamples)
+tar_load(poly)
+
+pdens <- poly %>% 
+  mutate(n = as.numeric(n)) %>% 
+  group_by(point, site,year,season,sp) %>%
+  summarise(n = sum(n)) %>%
+  ungroup() %>% 
+  pivot_wider(names_from = sp,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(across(where(is.numeric),
+                ~./(polysamples$count*0.3))) %>%
+  mutate(code = paste(.$point, .$year)) %>% 
+  tibble::column_to_rownames("code") %>% 
+  select(-point:-season) %>%
+  filter(specnumber(.)>5)
+
+psite <-  poly %>% 
+  left_join(polysamples) %>% 
+  mutate(n = as.numeric(n),
+         n = n/(count*0.3),
+         site = as.factor(site)) %>%
+  group_by(site,sp) %>%
+  summarise(n = sum(n)) %>%
+  ungroup() %>% 
+  pivot_wider(names_from = sp,
+              values_from = n,
+              values_fill = 0) %>% 
+  tibble::column_to_rownames("site") %>% 
+  filter(specnumber(.)>5)
+
+
+fdsite <- mFD::alpha.fd.multidim(sp_faxes_coord = scores(ppcoa),
+                                 asb_sp_w = as.matrix(decostand(psite,
+                                                                method = "hellinger")
+                                 ), verbose = FALSE)
+
+pfdsite <- fdsite$functional_diversity_indices %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column("site")
+
+
+
+fdalpha <- mFD::alpha.fd.multidim(
+  sp_faxes_coord = scores(ppcoa),
+  asb_sp_w = as.matrix(
+    decostand(pdens,
+              method = "hellinger")
+  ),
+  verbose = FALSE
+)
+
+
+pfd <- fdalpha$functional_diversity_indices %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column("code") %>% 
+  mutate(site = as.factor(stringr::str_sub(code, 1, -8)),
+         point = as.factor(stringr::str_sub(code, 1, -6)),
+         np = as.factor(stringr::str_sub(code, -6, -6)),
+         year = as.factor(stringr::str_sub(code, -4))) 
+
+(p1 <- p1 +
+    geom_text(
+      data    = pfdsite,
+      mapping = aes(
+        x = -0.4,
+        y = 0.4,
+        label = paste(round(fric * 100, 1), " %", sep = "")
+      ),
+      hjust   = .1,
+      vjust   = .3
+    )+
+    geom_text(
+      data    = pfdsite,
+      mapping = aes(
+        x = -0.4,
+        y = -0.4,
+        label = paste("S =", sp_richn, sep = " ")
+      ),
+      hjust   = .1,
+      vjust   = 0.3
+    )+
+    geom_text(
+      data    = pfd %>% group_by(site) %>% summarise(min = min(sp_richn), max = max(sp_richn)),
+      mapping = aes(
+        x = -0.15,
+        y = -0.4,
+        label = paste("(", min," — ", max, ")", sep = "")
+      ),
+      hjust   = .1,
+      vjust   = .3
+    )+
+    geom_text(
+      data    = pfd %>% group_by(site) %>% summarise(min = min(fric), max = max(fric)),
+      mapping = aes(
+        x = -0.1,
+        y = 0.4,
+        label = paste("(", round(min * 100, 1)," — ", round(max * 100, 1), " %)", sep = "")
+      ),
+      hjust   = .1,
+      vjust   = .3
+    )+
+    theme(text = element_text(size = 11*1.5),
+          legend.position = "none")
+)
+
+# svg("fig1_subplots.svg", width = 12, height = 8)
+# p1
+# dev.off()
+
+# ggsave("fig1_subplots.svg", p1, height = 105*1.5, width = 210*1.5, units = "mm", device =  svglite::svglite)
+#ggplotly(p)
+```
+
+However, substantial local spatial (among sampling points within a site) and temporal variability underlies this apparent consistency across sites, with some sites showing almost a 3-fold difference among the lowest and highest values of functional and taxonomic richness at the observation level. Some sites (Trevignon, Morlaix, Saint-Brieuc) notably presented higher variability, whereas others (Belle-ile, Keraliou, Rozegat) showed overall consistent trait diversity.
+
+```{r}
+#| fig-width: 9.75
+#| fig-height: 12
+#| fig-cap: Local spatiotemporal variability in polychaete functional diversity in all ten coralline algal beds from Brittany, France. Subplots represent the two first dimensions of the trait space, coloured polygons represent the trait space occupied by species found at a given sampling point in and time. Points in this the functional entities (i.e. unique combinations of traits) represented by species, sized according to their total abundance both shaped and coloured according to the sampling point.
+#| warning: false
+#| message: false
+#| echo: false
+
+tar_load(ptraits)
+tar_load(poly)
+tar_load(pdens)
+tar_load(pal)
+tar_load(polysamples)
+
+pcoaxes <- scores(ppcoa) %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column("sp")
+
+var_axes <- round(ppcoa$eig[ppcoa$eig > 0]/sum(ppcoa$eig[ppcoa$eig > 0])*100,2)
+
+# refaire avec les 0 structurelles
+poly <- poly %>% 
+  left_join(polysamples) %>% 
+  mutate(n = as.numeric(n),
+         n = n/(count*0.3),
+         site = as.factor(site))
+poly <- cast(poly, formula = site+point+year~sp, value = 'n', fun.aggregate = sum) %>% 
+  mutate(code = paste(point, year, sep = " ")) %>% 
+  select(-site, -point, -year) %>% 
+  column_to_rownames("code") %>%
+  decostand(., method = "hellinger") %>% 
+  rownames_to_column("code")
+poly <- melt(poly, variable_name = "sp")
+poly <- poly %>% 
+  mutate(site = as.factor(stringr::str_sub(code, 1, -8)),
+         point = as.factor(stringr::str_sub(code, 1, -6)),
+         np = as.factor(stringr::str_sub(code, -6, -6)),
+         year = as.factor(stringr::str_sub(code, -4)),
+         code = as.factor(code)) %>% 
+  dplyr::rename(n = value)
+
+df <- data.frame()
+for (i in levels(poly$code)) {
+  df_i <- poly %>%
+    filter(code == i) %>%
+    filter(n > 0) %>%
+    select(sp, point, site, code, year, n, np) %>% 
+    mutate(pointyear = paste(.$np, .$year)) %>% 
+    left_join(pcoaxes)
+  df <- rbind(df, df_i)
+  df
+}
+
+df <- df %>%
+  mutate(AZ1 = n*Dim1,
+         AZ2 = n*Dim2,
+         pointyear = as.factor(pointyear)) %>% 
+  group_by(code) %>%
+  mutate(C1 = sum(AZ1)/sum(n),
+         C2 = sum(AZ2)/sum(n)) %>% 
+  ungroup() 
+
+
+p2 <- ggplot() +
+  # geom_segment(
+  #   data = df,
+  #   aes(
+  #     x = C1,
+  #     y = C2,
+  #     xend = Dim1,
+  #     yend = Dim2,
+  #     colour = pointyear
+  #     ),
+  #   linetype = 2,
+  #   linewidth = .2) +
+  geom_vline(xintercept = 0,
+             linetype = 2) + 
+  geom_hline(yintercept = 0,
+             linetype = 2) +
+  ggpubr::stat_chull(
+    data = df %>% filter(site %in% c("Belle-Ile",
+                                     "Camaret",
+                                     "Glenan",
+                                     "Keraliou",
+                                     "Meaban")),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      colour = pointyear,
+      fill = pointyear,
+      linetype = np
+    ),
+    
+    geom = "polygon",
+    alpha = .05,
+    linewidth = .6
+  ) +
+  geom_point(
+    data = df %>% filter(site %in% c("Belle-Ile",
+                                     "Camaret",
+                                     "Glenan",
+                                     "Keraliou",
+                                     "Meaban")),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      colour = pointyear,
+      shape = np,
+      size = n
+    ),
+    alpha = .5,
+  ) +
+  geom_point(
+    data = df %>% filter(site %in% c("Belle-Ile",
+                                     "Camaret",
+                                     "Glenan",
+                                     "Keraliou",
+                                     "Meaban")),
+    mapping = aes(
+      x = C1,
+      y = C2,
+      shape = np,
+    ),
+    alpha = .9,
+    size = 2,
+    colour = "black"
+  ) +
+  scale_color_manual(values = rep(pal[c(1, 5, 7)], each = 3))+
+  scale_fill_manual(values = rep(pal[c(1, 5, 7)], each = 3))+
+  theme_light() +
+  theme(aspect.ratio = 1,
+        panel.background = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank())+
+  facet_grid(rows = vars(year), cols = vars(site))  
+p3 <- ggplot() +
+  # geom_segment(
+  #   data = df,
+  #   aes(
+  #     x = C1,
+  #     y = C2,
+  #     xend = Dim1,
+  #     yend = Dim2,
+  #     colour = pointyear
+  #     ),
+  #   linetype = 2,
+  #   linewidth = .2) +
+  geom_vline(xintercept = 0,
+             linetype = 2) + 
+  geom_hline(yintercept = 0,
+             linetype = 2) +
+  ggpubr::stat_chull(
+    data = df %>% filter(!site %in% c("Belle-Ile",
+                                     "Camaret",
+                                     "Glenan",
+                                     "Keraliou",
+                                     "Meaban")),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      colour = pointyear,
+      fill = pointyear,
+      linetype = np
+    ),
+    
+    geom = "polygon",
+    alpha = .05,
+    linewidth = .6
+  ) +
+  geom_point(
+    data = df %>% filter(!site %in% c("Belle-Ile",
+                                     "Camaret",
+                                     "Glenan",
+                                     "Keraliou",
+                                     "Meaban")),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      colour = pointyear,
+      shape = np,
+      size = n
+    ),
+    alpha = .5,
+  ) +
+  geom_point(
+    data = df %>% filter(!site %in% c("Belle-Ile",
+                                     "Camaret",
+                                     "Glenan",
+                                     "Keraliou",
+                                     "Meaban")),
+    mapping = aes(
+      x = C1,
+      y = C2,
+      shape = np,
+    ),
+    alpha = .9,
+    size = 2,
+    colour = "black"
+  ) +
+  scale_color_manual(values = rep(pal[c(1, 5, 7)], each = 3))+
+  scale_fill_manual(values = rep(pal[c(1, 5, 7)], each = 3))+
+  theme_light() +
+  theme(aspect.ratio = 1,
+        panel.background = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "none")+
+  facet_grid(rows = vars(year), cols = vars(site))
+p2/p3
+```
+
+## References

@@ -1,0 +1,46 @@
+TRAITS;MODALITES;ABREVIATIONS
+ MAX SIZE (mm);< 2 mm;Size_inf2
+ MAX SIZE (mm);2 mm - 5 mm;Size_2.5
+ MAX SIZE (mm);5 mm -10 mm;Size_5.10
+ MAX SIZE (mm);10 mm - 50 mm;Size_10.50
+ MAX SIZE (mm);50 mm - 100 mm;Size_50.100
+ MAX SIZE (mm);100 mm - 200 mm;Size_100.200
+ MAX SIZE (mm);> 200 mm;Size_sup200
+FEEDING MODE;Subsurface deposit feeder;SSDF
+FEEDING MODE;Surface deposit feeder;SDF
+FEEDING MODE;Active suspension feeder;ASF
+FEEDING MODE;Passive suspension feeder;PSF
+FEEDING MODE;GrazeR;Grazer
+FEEDING MODE;Predator;Pred
+FEEDING MODE;Scavenger;Scav
+FEEDING MODE;Parasitic;Parasitic
+FOOD SIZE;Microphagous;Microphagous
+FOOD SIZE;Macrophagous;Macrophagous
+POSITION;Infaunal;Infaunal
+POSITION;Epibenthic;Epibenthic
+LIVING HABIT ;Tube dweller;Tube_dweller
+LIVING HABIT ;Burrower;Burrower
+LIVING HABIT ;Crawler;Crawler
+LIVING HABIT ;Swimmer ;Swimmer
+LIVING HABIT ;Attached;Attached
+MOTILITY;No mobility;Mob_0
+MOTILITY;< 10 m;Mob_inf10
+MOTILITY;10 m - 100 m;Mob_10.100
+MOTILITY;100 m - 1000 m;Mob_100.1000
+BIOTURBATION;No bioturbation;Bioturb_N
+BIOTURBATION;Surficial modifiers;Bioturb_S
+BIOTURBATION;Biodiffusers;Bioturb_B
+BIOTURBATION;Upward conveyors;Bioturb_UC
+BIOTURBATION;Downward conveyors;Bioturb_DC
+BIOTURBATION;Regenerators;Bioturb_R
+SEXUAL DIFF;Hermaphrodite;Hermaphrodite
+SEXUAL DIFF;Gonochoric;Gonochoric
+REPRODUCTION;Asexual;Dev_asex
+REPRODUCTION;Direct;Dev_direct
+REPRODUCTION;Indirect - planktotrophic ;Dev_plankto
+REPRODUCTION;Indirect - lecithotrophic ;Dev_lecitho
+REPRODUCTION FREQ;Iteroparous;Iteroparous
+REPRODUCTION FREQ;Semelparous;Semelparous
+LIFE SPAN;Short (< 2 years);Short_life_span
+LIFE SPAN;Medium (2 to 5 years);Medium_life_span
+LIFE SPAN;Long (> 5 years);Long_life_span

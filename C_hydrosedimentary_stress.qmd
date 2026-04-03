@@ -1,0 +1,157 @@
+---
+title: "Supplementary Information: Annex C – Hydrosedimentary stress"
+subtitle: "Jardim et al. (2026). Trait-based insights into complexity–diversity relationships: different habitat complexity components drive niche diversity and community size. Hydrobiologia."
+crossref:
+  fig-prefix: Figure\ C
+  fig-title: Figure\ C
+  subref-labels: alpha a
+  tbl-prefix: Table\ C
+  tbl-title: Table\ C
+format:
+  pdf:
+    documentclass: scrartcl
+    papersize: letter
+    mainfont: Times New Roman 
+    sansfont: Arial
+    fontsize: 12pt
+    geometry: margin=1in
+    fig-height: 6.5
+    fig-width: 6.5    
+    fig-pos: "H"
+    colorlinks: true
+    urlcolor: red
+editor: source
+bibliography: bibliography.bib
+execute: 
+  cache: refresh
+---
+
+```{r}
+#| include: false
+library(targets)
+library(dplyr)
+library(tidyr)
+library(ggExtra)
+library(paletteer)
+library(vegan)
+library(BAT)
+library(mFD)
+library(tibble)
+library(ade4)
+library(adegraphics)
+library(ggplot2)
+library(patchwork)
+library(ggrepel)
+library(plotly)
+library(sf)
+library(tmap)
+# library(cxhull)
+library(lme4)
+library(jtools)
+library(sandwich)
+library(fixest)
+library(broom)
+library(lmtest)
+library(pbkrtest)
+library(lavaan)
+library(piecewiseSEM)
+library(emmeans)
+library(DiagrammeR)
+library(stringr)
+library(ggfortify)
+library(car)
+library(reshape)
+
+set.seed(1)
+```
+A Principal Components Analysis (PCA) on the standardised values of several complementary environmental variables was performed to describe hydrological and sedimentary stress (henceforth referred to as hydrosedimentary stress) for each observation. Percentage of mud content in sediment (mud), sediment sorting (si), mean peak frequency of sea wind (fp_mean), mean (cur_mean) and minimum (cur_min) current velocity, mean (wnd_mean) and minimum (wnd_min) wind speed, and water depth were selected. The first axis explained 42.5 % of the total variance and was used as a proxy for the hydrosedimentary stress, reducing dimensionality for subsequent structural equation modelling. The first axis depicted a gradient ranging from sheltered, shallow sites dominated by frequent but low-intensity wind and tidal-dominated waves and currents, presenting well-sorted sediments with higher percentages of mud (negative values), to exposed, deeper sites dominated by less frequent but high-intensity wind dominated waves and currents, presenting poorly-sorted sediments with higher mud percentages (positive values).
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Screeplot of the hydrosedimentary stress PCA, showing observed and expected (under the Broken-Stick model, red line) values of explained variance for each axis.  The first axis explains thrice the variance explained by the second axis. 
+tar_load(env)
+tar_load(pal)
+load("data/depth_emodnet.RData")
+names_env <- rownames(env)
+env <- env %>% 
+  left_join(depth) %>% 
+  mutate(dpt = -1*elevation)
+rownames(env) <- names_env
+envsel <- env %>% 
+  # mutate(fp_max = log(fp_max), fp_mean = log(fp_mean), mud = logit(mud), cur_mean = log(cur_mean), cur_max = log(cur_max)) %>% 
+  select(hs_mean,
+         # fp_max,
+         dpt,
+         fp_mean,
+         cur_mean,
+         cur_min,
+         # cur_max,
+         # wnd_max,
+         wnd_min,
+         wnd_mean,
+         mud,
+         si)
+envpca <- rda(envsel, scale = TRUE)
+var_axes <- round(envpca$CA$eig/sum(envpca$CA$eig)*100,2)
+
+
+var_axes <- data.frame(var = var_axes,
+                       dim = as.numeric(stringr::str_remove(names(var_axes),
+                                                 "PC")),
+                       bstick = bstick(length(envpca$CA$eig)))
+
+ggplot(var_axes)+
+  geom_col(aes(x = dim, y = var), width = .9)+
+  geom_line(aes(x = dim, y = bstick*100), col = "darkred")+
+  scale_y_continuous(n.breaks = 10)+
+  scale_x_continuous(n.breaks = 7)+
+  geom_text(aes(x = dim, y = var, label = paste(var, "%", sep = " "),vjust = 1), colour = "white")
+
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Hydrosedimentary stress PCA. The first axis depicts a gradient ranging from sheltered, shallow sites dominated by frequent but low-intensity wind and tidal-dominated waves and currents, presenting well-sorted sediments with higher percentages of mud (negative values), to exposed, deeper sites dominated by less frequent but high-intensity wind dominated waves and currents, presenting poorly-sorted sediments with higher mud percentages (positive values). The second axis separates sites dominated by wind generated waves (negative values), from those dominated by bottom currents (positive values).
+site_scores <- scores(envpca, scaling = 2, display = 'sites', choices = c(1:3)) %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column("code") %>% 
+  mutate(site = str_sub(code,1, -8),
+         year = str_sub(code, -4))
+sp_scores <- scores(envpca, scaling = 2, display = 'species', choices = c(1:3))
+
+var_axes <- round(envpca$CA$eig/sum(envpca$CA$eig)*100,2)
+ggplot()+
+  geom_point(data = site_scores,
+                       mapping = aes(x = PC1,
+                                     y = PC2,
+                                     colour = site,
+                                     shape = year),
+                       alpha = .7,
+                       size = 1.5)+
+             geom_segment(data = sp_scores,
+                         aes(x = 0, y = 0,
+                             xend = PC1,
+                             yend = PC2),
+                         colour="black")+
+             geom_text_repel(data=sp_scores, aes(x = PC1,
+                                             y= PC2,
+                                             label = rownames(sp_scores)),
+                            fontface="bold",
+                            colour="black",
+                            segment.colour="black")+
+             scale_colour_manual(values = pal)+
+             scale_fill_manual(values = pal)+
+             theme_light()+
+             theme(aspect.ratio = 1,
+                   legend.position = "bottom",
+                   legend.title = element_text(size = 7),
+                   legend.text = element_text(size = 7),
+                   legend.box = "vertical")+
+  xlab(paste(names(var_axes)[1],": ",var_axes[1],"%"))+
+               ylab(paste(names(var_axes)[2],": ",var_axes[2],"%"))
+```
+

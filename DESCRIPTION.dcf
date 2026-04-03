@@ -1,0 +1,17 @@
+Package: jardim_et_al_2026_hydrobiologia_SI
+Type: Package
+Title: Jardim et al. (2026). Trait-based insights into complexity–diversity relationships: different habitat complexity components drive niche diversity and community size. Hydrobiologia.
+Version: 0.0.0.9000
+Authors@R: c(
+    person(given   = "Victor",
+           family  = "Leite Jardim",
+           role    = c("aut", "cre", "cph"),
+           email   = "vleitejardim@gmail.com",
+           comment = c(ORCID = "0000-0001-5192-6485")))
+Description: Research compendium of the project Jardim et al. (2026). Trait-based insights into complexity–diversity relationships: different habitat complexity components drive niche diversity and community size. Hydrobiologia.
+URL: https://github.com/victorleitejardim/jardim_et_al_2026_hydrobiologia_SI
+BugReports: https://github.com/victorleitejardim/jardim_et_al_2026_hydrobiologia_SI/issues
+License: GPL-2
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3

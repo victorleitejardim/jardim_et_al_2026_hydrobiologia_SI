@@ -1,0 +1,558 @@
+---
+title: "Supplementary Information: Annex E – Multivariate regression tree"
+subtitle: "Jardim et al. (2026). Trait-based insights into complexity–diversity relationships: different habitat complexity components drive niche diversity and community size. Hydrobiologia."
+crossref:
+  fig-prefix: Figure E
+  fig-title: Figure E
+  subref-labels: alpha a
+  thm-prefix: Figure
+  thm-title: Figure
+  tbl-prefix: Table E
+  tbl-title: Table E
+format:
+  pdf:
+    documentclass: scrartcl
+    papersize: letter
+    mainfont: Times New Roman 
+    sansfont: Arial
+    fontsize: 12pt   
+    geometry: margin=1in
+    fig-height: 4
+    fig-width: 6.5    
+    fig-pos: "H"
+    colorlinks: true
+    urlcolor: red
+    toc: true
+editor: source
+execute: 
+  cache: refresh
+bibliography: bibliography.bib
+---
+
+```{r}
+#| include: false
+library(targets)
+library(dplyr)
+library(tidyr)
+library(ggExtra)
+library(paletteer)
+library(vegan)
+library(BAT)
+library(mFD)
+library(tibble)
+library(ade4)
+library(adegraphics)
+library(ggplot2)
+library(patchwork)
+library(ggrepel)
+library(plotly)
+library(sf)
+library(tmap)
+library(lme4)
+library(jtools)
+library(sandwich)
+library(fixest)
+library(broom)
+library(lmtest)
+library(pbkrtest)
+library(lavaan)
+library(piecewiseSEM)
+library(emmeans)
+library(DiagrammeR)
+library(stringr)
+library(ggfortify)
+library(car)
+library(reshape)
+library(patchwork)
+
+set.seed(1)
+tar_load(pal)
+```
+
+## Details on MRT calculation
+
+To further understand the combined effects of hydrosedimentary stress and habitat complexity metrics on the diversity and composition of polychaete assemblages, observations grouped based on similarities in their polychaete assemblages while accounting for hydrosedimentary regimes and coralline algal nodule complexity. This grouping was achieved using a Multivariate Regression Tree (MRT, [@death_multivariate_2002]), using a modified version of the package 'mvpart' [@therneau_mvpart_2014] that allows it to be used in version R version 4.5, available at: <https://github.com/victorleitejardim/mvpart>. This updated package only changes two C functions no longer supported in R versions \> 4.0, but all calculations remain the same.
+
+The MRT was performed with predictor variables including the scores of the first dimension of the hydosedimentary dynamics PCA (Annex C) and the median values of each habitat complexity metric that showed a significant effect on polychaete functional identity in the pSEM (Figure 4 — main text). The number of terminal nodes (clusters) was selected manually to minimise the cross-validation error (calculated with 200 multiple cross validations) while still allowing for ecological inference of the effects of each variable deemed significant in the SEM (Supplementary materials).
+
+## Defining the number of splits
+
+In MRT, the number of splits can be fully user-defined, depending on the question at hand, and the tree can be fully resolved. Nevertheless, the ideal number of terminal nodes can be defined as described by @death_multivariate_2002:
+
+> "For a sums of squares regression tree, variation of the response is expressed as variance and overall fit is simply the fraction of variance not explained by the tree. More generally, fit is defined by relative error (RE); the total impurity of the leaves divided by the impurity of the root node (the undivided data). RE gives an over-optimistic estimate of how accurately a tree will predict for new data, and predictive accuracy is better estimated from the cross-validated relative error (CVRE). CVRE varies from zero for a perfect predictor to close to one for a poor predictor."
+
+The ideal tree according to CVRE only recovers 3 splits based on hydrosedimentary stress and 1 based on nodule convexity (@fig-1, R-squared = ). Because we are interested in understanding how trait diversity and structure vary among gradients in both hydrosedimentary stress, nodule convexity and nodule biomass, additional splits are investigated.\
+\
+While CVRE increases with additional nodes, the first split based on nodule biomass is found at 8 terminal nodes (@fig-2). This tree is more informative (R-squared = 0.38), but has one split separating communities under hydrosedimentary stress lower than -0.32 (most left-side nodes). Under that threshold, communities are quite similar, and only three observations are found under hydrosedimentary stress lower than -0.75. Therefore, the final MRT was trimmed to remove this additional, uninformative split (@fig-3).
+
+```{r}
+#| warning: false
+#| message: false
+#| echo: false
+#| output: false
+library(mvpart)
+tar_load(pdens) 
+load(file = "data/semtable.RData")
+mrt.min <- mvpart(data.matrix(decostand(pdens, method = "hellinger")) ~ .,
+                 data = semtable %>% 
+                   dplyr::select(code, convexity, biomass, hydro) %>%
+                   mutate(biomass= sqrt(biomass)) %>%
+                   column_to_rownames("code"),
+                 xv = "min",
+                 # size = 8,
+                 xvmult = 200,
+                 control = rpart.control(xval = nrow(pdens)*.5),
+                 plot.add = FALSE,
+                 all.leaves = TRUE,
+                 dissim = "euc")
+```
+
+```{r}
+#| label: fig-1
+#| warning: false
+#| message: false
+#| echo: false
+#| fig-cap: "Ideal number of tree splits."
+#| fig-subcap:
+#|  - "The relationship between the relative error (green line, y axis), cross-validated relative error (y axis, blue line),  and the number of terminal nodes (and its resulting tree complexity parameter; x axis) is shown."
+#|  - "MRT with the ideal number of terminal nodes (5)."
+
+
+plotcp(mrt.min)
+plot(mrt.min, margin = .2)
+text(mrt.min, stats = TRUE, use.n = TRUE, cex = .5)
+
+```
+
+```{r}
+#| warning: false
+#| message: false
+#| output: false
+#| echo: false
+
+mrt.env<- mvpart(data.matrix(decostand(pdens, method = "hellinger")) ~ .,
+                 data = semtable %>% 
+                   dplyr::select(code, convexity, biomass, hydro) %>%
+                   mutate(biomass= sqrt(biomass)) %>%
+                   column_to_rownames("code"),
+                 xv = "pick",
+                 size = 8,
+                 xvmult = 200,
+                 control = rpart.control(xval = nrow(pdens)*.5),
+                 plot.add = FALSE,
+                 all.leaves = TRUE,
+                 dissim = "euc")
+```
+
+```{r}
+#| label: fig-2
+#| warning: false
+#| message: false
+#| echo: false
+#| fig-cap: "MRT with 8 terminal nodes."
+#| fig-subcap: 
+#|  - " "
+#|  - " " 
+
+plotcp(mrt.env)
+plot(mrt.env, margin = .2)
+text(mrt.env, stats = TRUE, use.n = TRUE, cex = .5)
+# rpart.pca(mrt.env)
+```
+
+```{r}
+#| label: fig-3
+#| warning: false
+#| message: false
+#| echo: false
+#| fig-cap: "Top panel of figure 5 (main-text): final trimmed MRT."
+
+mrt.env_trim <- snip.rpart(x = mrt.env, toss = 3) #trim at the third node that separates keraliou and 3 rozegat observations
+
+plot(mrt.env_trim, margin = .2)
+text(mrt.env_trim, stats = TRUE, use.n = TRUE, cex = .5)
+library(gridGraphics)
+library(grid)
+# grid.echo()
+# a <- grid.grab()
+# fig5a <- ggplotify::as.ggplot(a)
+
+# ggsave("fig5a.svg", fig5a, height = 105*1.285, width = 210*1.285, units = "mm", device =  svglite::svglite)
+```
+
+## Refuge and Disturbance gradient
+
+To examine functional differences among the resulting clusters, polychaete assemblages were pooled at the cluster level and the trait space occupied by all species within each cluster was constructed. This analysis allowed to explore variation of trait structure within polychaete assemblages under contrasting combinations of hydrosedimentary disturbance and habitat-mediated refuge (@fig-4, @fig-5)
+
+```{r}
+#| label: fig-4
+#| warning: false
+#| message: false
+#| echo: false
+#| fig-cap: "Base of bottom panel of Figure 5 (main-text): the average values of hydrosedimentary stress and nodule convexity for assemblages in each MRT cluster are shown. Colored circles represent clusters, sized according to their average nodule biomass." 
+ 
+semtable$groups <- as.numeric(mrt.env_trim$where)
+mean_group <- semtable %>% 
+  mutate(groups = paste("g", groups, sep="")) %>% 
+  group_by(groups) %>%
+  summarise(mean_c = mean(convexity),
+            min_c = min(convexity),
+            max_c= max(convexity),
+            mean_b = mean(sqrt(biomass)),
+            min_b = min(sqrt(biomass)),
+            max_b= max(sqrt(biomass)),
+            mean_h = mean(hydro),
+            min_h = min(hydro),
+            max_h= max(hydro),
+            mean_fric = mean(fric),
+            min_fric = min(fric), 
+            max_fric = max(fric), 
+            ) %>% 
+  mutate(groups = as.factor(groups))
+
+ggplot(mean_group)+
+  geom_vline(aes(xintercept = mean_c, colour = groups), linetype = 2)+
+  geom_hline(aes(yintercept = mean_h, colour = groups), linetype = 2)+
+  geom_point(aes(x = mean_c, y = mean_h, size = mean_b, col = groups))+
+  scale_color_manual(values = pal)+
+  theme_light() +
+  theme(aspect.ratio = .35, panel.grid = element_blank())
+```
+
+```{r}
+#| label: fig-5
+#| warning: false
+#| message: false
+#| echo: false
+#| fig-cap: "Bottom panel of Figure 5 (main-text): Polychaete communities under different disturbance and refuge levels. Observations were clustered into seven groups according to nodule biomass and convexity as well as hydrosedimentary stress. Refuge availability and quality increases with nodule biomass and decreases with nodule convexity, while disturbance increases with hydrosedimentary stress. Polygons represent the trait space occupied by species found at a given group, positioned along convexity and hydrosedimentary stress gradients according to the average values for each cluster. Filled coloured circles indicate species present in each cluster, sized according to their average Hellinger-transformed abundances. The number of observations in a group is shown under the terminal branches of the multivariate regression tree (n). The average, minimum and maximum trait richness (the percentage of the regional trait space occupied by the species present in a group) are shown. H.S.: hydrosedimentary stress."
+
+tar_load(poly)
+tar_load(ptraits)
+tar_load(gdis)
+tar_load(poly)
+ppcoa <- vegan::wcmdscale(sqrt(gdis), k = 5, eig = TRUE)
+var_axes <- round(ppcoa$eig[ppcoa$eig > 0]/sum(ppcoa$eig[ppcoa$eig > 0])*100,2)
+pcoaxes <- scores(ppcoa) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("sp") %>%
+  left_join(poly %>%
+              select(sp, genus)) %>%
+  distinct(sp, .keep_all = TRUE) 
+
+phel <- decostand(pdens, method = "hellinger") 
+polygroups <- pdens %>% 
+  mutate(groups = mrt.env_trim$where) %>% 
+  rownames_to_column("code") %>%
+  mutate(site = as.factor(stringr::str_sub(code, 1, -8)),
+         point = as.factor(stringr::str_sub(code, 1, -6)),
+         np = as.factor(stringr::str_sub(code, -6, -6)),
+         year = as.factor(stringr::str_sub(code, -4))) 
+
+polygroups <- melt(polygroups, variable_name = "sp", id.vars = c("code", "site", "point", "np", "year", "groups" ))
+
+polygroups <- cast(polygroups, formula = groups ~sp, value = 'n', fun.aggregate = sum, fill = 0)%>%
+  decostand(., method = "hellinger") 
+# %>% 
+#   mutate(site = stringr::str_sub(groups, 1, -3),
+#          site = as.factor(str_remove(site, "_")),
+#          groups = stringr::str_sub(groups, -2),
+#          groups = as.numeric(str_remove(groups, "_"))) 
+
+
+# polygroups <- melt(polygroups, variable_name = "sp", id.vars = c("site", "groups"))
+rownames(polygroups) <- paste("g", rownames(polygroups), sep = "")
+fdgroups <- mFD::alpha.fd.multidim(sp_faxes_coord = scores(ppcoa),
+                       asb_sp_w = as.matrix(polygroups), verbose = FALSE)
+pfdgroups <- fdgroups$functional_diversity_indices %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column("groups")  
+polygroups <- melt(polygroups %>%
+  rownames_to_column("groups"), variable_name = "sp") 
+
+polygroups <- polygroups %>%
+  mutate(groups = as.factor(groups), 
+           n = as.numeric(value))
+  
+df <- data.frame()
+for (i in levels(polygroups$groups)) {
+    df_i <- polygroups %>%
+      filter(groups == i) %>%
+      # filter(n > 0) %>%
+      # select(sp, groups, n, site) %>% 
+      select(sp, groups, n) %>% 
+      left_join(pcoaxes)
+  df <- rbind(df, df_i)
+  df
+}
+
+df <- df %>%
+  mutate(AZ1 = n*Dim1,
+         AZ2 = n*Dim2) %>% 
+  # group_by(site, groups) %>%
+  group_by(groups) %>%
+  mutate(C1 = sum(AZ1)/sum(n),
+         C2 = sum(AZ2)/sum(n)) %>% 
+  ungroup() 
+
+  
+pgroups <- ggplot() +
+  geom_vline(xintercept = 0,
+             linetype = 2) + 
+  geom_hline(yintercept = 0,
+             linetype = 2) +
+  ggpubr::stat_chull(
+    data = pcoaxes,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+    ),
+    colour = "gray",
+    fill = NA,
+    geom = "polygon",
+    alpha = .5,
+    linewidth = .6
+  )+
+  geom_point(
+    data = pcoaxes,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2
+    ),
+    colour = "gray",
+    shape = 1,
+    alpha = .9
+  ) +
+  ggpubr::stat_chull(
+    data = df,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      # fill = site,
+      # colour = site,
+      fill = groups,
+      colour = groups
+    ),
+    geom = "polygon",
+    alpha = .1,
+    linetype = 2,
+    linewidth = .4
+  ) +
+   geom_segment(
+    data = df,
+    aes(
+      x = C1,
+      y = C2,
+      xend = Dim1,
+      yend = Dim2,
+      colour = site
+      ),
+    linetype = 2,
+    linewidth = .2,
+    alpha = .5) +
+  geom_point(
+    data = df,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      # colour = site,
+      colour = groups,
+      # shape = year,
+      size = n
+    ),
+    alpha = .5
+  ) +
+    geom_point(
+    data = df,
+    mapping = aes(
+      x = C1,
+      y = C2,
+      # fill = site
+      fill = groups
+    ),
+    # alpha = .9,
+    size = 2,
+    colour = "black"
+  ) +
+  geom_text(
+    data    = mean_group,
+    mapping = aes(
+      x = -0.285,
+      y = 0.4,
+      label = paste(round(mean_fric*100, 1), " %", "(", round(min_fric * 100, 1)," % — ", round(max_fric * 100, 1), " %)", sep = "")
+    ),
+    hjust   = .15,
+    vjust   = .3
+  )+
+  scale_color_manual(values = pal)+
+  scale_fill_manual(values = pal)+
+  scale_size(range = c(.5,1))+
+  theme_light() +
+  theme(aspect.ratio = 1, panel.grid = element_blank())+
+  facet_wrap(facets =  vars(groups), nrow = 2)
+
+library(patchwork)
+gcols <- data.frame(groups = levels(as.factor(df$groups)), gcol = pal[1:7])
+df <- df %>%  left_join(gcols)
+plist <-list()
+for (i in df$groups) {
+  plist[[i]] <- ggplot() +
+  geom_vline(xintercept = 0,
+             linetype = 2,
+             linewidth = .25) + 
+  geom_hline(yintercept = 0,
+             linetype = 2.5,
+             linewidth = .25) +
+  # ggpubr::stat_chull(
+  #   data = pcoaxes,
+  #   mapping = aes(
+  #     x = Dim1,
+  #     y = Dim2,
+  #   ),
+  #   colour = "gray",
+  #   fill = NA,
+  #   geom = "polygon",
+  #   alpha = .5,
+  #   linewidth = .6
+  # )+
+  geom_point(
+    data = df %>% filter(n == 0),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2
+    ),
+    colour = "gray",
+    size = .5,
+    shape = 21,
+    alpha = .9,
+    stroke = .5
+  ) +
+  ggpubr::stat_chull(
+    data = df %>% filter(groups == i, n > 0),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      # fill = site,
+      # colour = site,
+      fill = groups,
+      colour = groups
+    ),
+    geom = "polygon",
+    alpha = .1,
+    linetype = 2,
+    linewidth = .4
+  ) +
+   geom_segment(
+    data = df %>% filter(groups == i, n > 0),
+    aes(
+      x = C1,
+      y = C2,
+      xend = Dim1,
+      yend = Dim2,
+      colour = groups
+      ),
+    linetype = 2,
+    linewidth = .1,
+    alpha = .5) +
+  geom_point(
+    data = df %>% filter(groups == i, n > 0),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      # colour = site,
+      colour = groups,
+      # shape = year,
+      size = n
+    ),
+    alpha = .9
+  ) +
+    geom_point(
+    data = df %>% filter(groups == i) %>% select(C1,C2, groups) %>%  unique(),
+    mapping = aes(
+      x = C1,
+      y = C2,
+      # fill = site
+      fill = groups
+    ),
+    # alpha = .9,
+    size = .75,
+    colour = "black"
+  ) +
+  scale_color_manual(values = df$gcol[df$groups == i])+
+  scale_fill_manual(values = df$gcol[df$groups == i])+
+  scale_size(range = c(.5,2.5))+
+  theme_light() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        rect = element_blank(),
+        legend.position = "none"
+        )
+}
+
+
+(fig5 <- ggplot(mean_group)+
+  geom_vline(aes(xintercept = mean_c, colour = groups), linetype = 2,alpha = .5)+
+  geom_hline(aes(yintercept = mean_h, colour = groups), linetype = 2, alpha = .5)+
+  # geom_point(aes(x = mean_c, y = mean_h, size = mean_b, col = groups))+
+  scale_color_manual(values = pal)+
+  theme_light() +
+  scale_y_continuous(limits = c(-.88,.8), expand = FALSE)+
+  scale_x_continuous(limits = c(0.25,0.535), expand = FALSE)+
+  theme(aspect.ratio = .35,
+        panel.grid = element_blank(),
+        panel.background = element_blank(),
+        plot.background = element_blank(),
+        legend.position = "none",
+        text = element_text(size = 11))+
+  annotation_custom(ggplotGrob(plist[["g4"]]),
+                xmin = mean_group$mean_c[mean_group$groups=="g4"]-.285,
+                ymin = mean_group$mean_h[mean_group$groups=="g4"]-.285,
+                xmax = mean_group$mean_c[mean_group$groups=="g4"]+.285,
+                ymax = mean_group$mean_h[mean_group$groups=="g4"]+.285
+                )+
+  annotation_custom(ggplotGrob(plist[["g6"]]),
+                xmin = mean_group$mean_c[mean_group$groups=="g6"]-.285,
+                ymin = mean_group$mean_h[mean_group$groups=="g6"]-.285,
+                xmax = mean_group$mean_c[mean_group$groups=="g6"]+.285,
+                ymax = mean_group$mean_h[mean_group$groups=="g6"]+.285
+                )+
+  annotation_custom(ggplotGrob(plist[["g7"]]),
+                xmin = mean_group$mean_c[mean_group$groups=="g7"]-.285,
+                ymin = mean_group$mean_h[mean_group$groups=="g7"]-.285,
+                xmax = mean_group$mean_c[mean_group$groups=="g7"]+.285,
+                ymax = mean_group$mean_h[mean_group$groups=="g7"]+.285
+                )+
+  annotation_custom(ggplotGrob(plist[["g10"]]),
+                xmin = mean_group$mean_c[mean_group$groups=="g10"]-.285,
+                ymin = mean_group$mean_h[mean_group$groups=="g10"]-.285,
+                xmax = mean_group$mean_c[mean_group$groups=="g10"]+.285,
+                ymax = mean_group$mean_h[mean_group$groups=="g10"]+.285
+                )+
+  annotation_custom(ggplotGrob(plist[["g11"]]),
+                xmin = mean_group$mean_c[mean_group$groups=="g11"]-.285,
+                ymin = mean_group$mean_h[mean_group$groups=="g11"]-.285,
+                xmax = mean_group$mean_c[mean_group$groups=="g11"]+.285,
+                ymax = mean_group$mean_h[mean_group$groups=="g11"]+.285
+                )+
+  annotation_custom(ggplotGrob(plist[["g12"]]),
+                xmin = mean_group$mean_c[mean_group$groups=="g12"]-.285,
+                ymin = mean_group$mean_h[mean_group$groups=="g12"]-.285,
+                xmax = mean_group$mean_c[mean_group$groups=="g12"]+.285,
+                ymax = mean_group$mean_h[mean_group$groups=="g12"]+.285
+                )+
+  annotation_custom(ggplotGrob(plist[["g13"]]),
+                xmin = mean_group$mean_c[mean_group$groups=="g13"]-.285,
+                ymin = mean_group$mean_h[mean_group$groups=="g13"]-.285,
+                xmax = mean_group$mean_c[mean_group$groups=="g13"]+.285,
+                ymax = mean_group$mean_h[mean_group$groups=="g13"]+.285
+                )+
+  labs(x = "Convexity", y = "Hydrosedimentary dynamics"))
+
+
+# ggsave("fig5_2.svg", fig5, height = 100, width = 210, units = "mm", device =  svglite::svglite)
+```
+
+## References

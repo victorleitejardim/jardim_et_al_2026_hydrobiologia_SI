@@ -1,0 +1,447 @@
+---
+title: "Supplementary Information: Annex B – Mesh treatment and habitat complexity estimation"
+subtitle: "Jardim et al. (2026). Trait-based insights into complexity–diversity relationships: different habitat complexity components drive niche diversity and community size. Hydrobiologia."
+crossref:
+  fig-prefix: Figure\ B
+  fig-title: Figure\ B
+  subref-labels: alpha a
+  tbl-prefix: Table\ B
+  tbl-title: Table\ B
+format:
+  pdf:
+    documentclass: scrartcl
+    papersize: letter
+    mainfont: Times New Roman 
+    sansfont: Arial
+    fontsize: 12pt
+    geometry: margin=1in
+    fig-height: 4
+    fig-width: 6.5    
+    fig-pos: "H"
+    colorlinks: true
+    urlcolor: red
+    toc: true
+editor: source
+bibliography: bibliography.bib
+execute: 
+  cache: refresh
+---
+
+```{r}
+#| include: false
+library(targets)
+library(dplyr)
+library(tidyr)
+library(ggExtra)
+library(paletteer)
+library(vegan)
+library(BAT)
+library(mFD)
+library(tibble)
+library(ade4)
+library(adegraphics)
+library(ggplot2)
+library(patchwork)
+library(ggrepel)
+library(plotly)
+library(sf)
+library(tmap)
+# library(cxhull)
+library(lme4)
+library(jtools)
+library(sandwich)
+library(fixest)
+library(broom)
+library(lmtest)
+library(pbkrtest)
+library(lavaan)
+library(piecewiseSEM)
+library(emmeans)
+library(DiagrammeR)
+library(stringr)
+library(ggfortify)
+library(car)
+library(reshape)
+
+set.seed(1)
+```
+
+## Details on mesh treatment
+
+Before geometrical complexity metrics were calculated, meshes were initially treated for quality control using python programming language version 3.11.4. A mesh is watertight if it does not have any missing triangles, and is manifold if each edge is incident to only one or two faces and the faces incident to a vertex form a closed or an open fan [@bonneau_surface_2019]. To achieve these properties, only the largest connected mesh in the file was extracted, in order to remove smaller disconnected triangles created from noisy cloud points. Then, all non-manifold triangles were removed and the resulting holes in the mesh were filled with manifold triangles using the 'vedo' library [@musy_vedo_2024]. These steps were repeated heuristically through PyMeshFix's [@attene_lightweight_2010] algorithm, which converts the input mesh to a single combinatorial manifold and proceeds iteratively by removing growing neighbourhoods of undesired elements and by patching the resulting surface gaps.
+
+The processed triangular meshes were then remeshed through an almost isotropic mesh parameterisation algorithm to minimise differences in mesh detail among meshes so that all meshes have an average edge length of 0.1 mm2 [@pietroni_almost_2010]. Finally, the remeshed 3D models were further treated using R programming language version 4.5.2 [@rcoreteam2025]. Packages Morpho and Rvcg [@schlager_morpho_2017] were used to read the triangular meshes, perform final cleaning algorithms to insure manifold, watertight, coherently oriented meshes, and quantify nodule geometry.
+
+## Regional morphological trait space quality
+
+Following mesh treatment, several geometric characteristics were calculated for each nodule. Three variables were quantified to describe nodule size: largest nodule diameter, surface area and volume. In addition to the metrics describing habitat amount and geometry, a proxy for habitat diversity was computed to complete the set of habitat complexity components considered. Habitat diversity was quantified using a trait dispersion approach following @loke_measuring_2022 . Nodule diameter, surface area, volume, sphericity, convexity, and surface area-to-volume ratio were selected as complementary morphological traits capturing multiple aspects of nodule geometry and size. PCoA on Euclidean distances among all 1080 coralline algal nodules was performed on this trait matrix, based on the standardised (centre-scaled) values of the selected traits.\
+Following the workflow proposed by @magneville_mfd_2021, the ideal number of dimensions used to define the reduced functional space was chosen to minimise the mean absolute deviation between species pairwise distances (mad) while keeping the least amount of dimensions possible [@maire_how_2015]. Since the first 3 dimensions explained over 96% of the variability, and the other 3 dimensions explained less variability than expected under the broken-stick method, habitat diversity was calculated using only the first 3 axes.
+
+```{r}
+#| echo: false
+#| warning: false
+tar_load(geom)
+
+geomed <- geom %>%
+  mutate(year = as.factor(year)) %>% 
+  group_by(site, point, year) %>%
+  summarise(across(where(is.numeric), median)) %>%
+  mutate(vol = log(vol),
+         surf = log(surf)
+         ) %>% 
+  ungroup()
+
+geomsel <- geom %>% 
+  select(sample,
+         surf,
+         vol,
+         l,
+         # i,
+         # s,
+         # dr1,
+         # dr2,
+         # dr3,
+         # fd,
+         sphe,
+         # compact,
+         # intspace,
+         convexity,
+         rsv) %>%
+  mutate(
+    surf = log(surf),
+    vol = log(vol),
+    l = log(l)
+    # sphe = car::logit(sphe),
+    # intspace = log(intspace),
+    # compact = car::logit(compact),
+    # convexity = car::logit(convexity)
+  ) %>%
+  tibble::column_to_rownames("sample") |>
+  scale() |>
+  as.data.frame()
+```
+
+```{r}
+#| tbl-cap: Mean absolute deviation between pairwise distances (mad) among coralline algal nodules according to the number of PCoA dimensions
+#| echo: false
+
+mdis <- dist(geomsel)
+mfsp <- quality.fspaces(mdis)
+knitr::kable(mfsp$quality_fspaces)
+```
+
+```{r}
+#| fig-height: 6.5
+#| fig-cap: Observed proportion of variance explained by each PCoA dimension, compared to the expected proportion of variance under a broken-stick model (red line).
+#| echo: false
+#| warning: false
+
+mpcoa <- vegan::wcmdscale(mdis, k = 6, eig = TRUE)
+var_axes <- round(mpcoa$eig[mpcoa$eig > 0]/sum(mpcoa$eig[mpcoa$eig > 0])*100,2)
+var_axes <- data.frame(var = var_axes[1:6], dim = c(1:6), bstick = bstick(length(mpcoa$eig))[1:6])
+
+ggplot(var_axes)+
+  geom_col(aes(x = dim, y = var), width = .9)+
+  geom_line(aes(x = dim, y = bstick*100), col = "darkred")+
+  scale_y_continuous(n.breaks = 10)+
+  scale_x_continuous(n.breaks = 7)+
+  geom_text(aes(x = dim, y = var, label = paste(var, "%", sep = " "),vjust = 1), colour = "white")+
+  annotate(geom = "text", x = 3, y = 40, label = paste( colSums(var_axes[1:3,])[1], "%", sep = " "),vjust = 1, colour = "black")
+```
+
+```{r}
+#| fig-height: 6.5
+#| warning: false
+#| message: false
+#| echo: false
+#| fig-cap: First two axes of the regional coralline algae morphological trait space, which explain around 80 % of the trait variability. Arrows (fitted vectors) show the correlation of each trait to the first two axes. Arrow (lengths and widths) and names are sized according to the squared coefficient of correlation for each trait. rsv = surface area to volume ratio; surf = nodule surface area; sphe = sphericity; vol = nodule volume; l = largest nodule diameter.
+
+tar_load(geomcomm)
+tar_load(pal)
+mpcoa <- vegan::wcmdscale(mdis, k = 3, eig = TRUE)
+
+var_axes <- round(mpcoa$eig[mpcoa$eig > 0]/sum(mpcoa$eig[mpcoa$eig > 0])*100,2)
+pcoaxes <- scores(mpcoa) %>% 
+  as.data.frame() %>% 
+  tibble::rownames_to_column("sample") %>% 
+  left_join(geom %>% select(sample, site)) %>% distinct(sample, .keep_all = TRUE)
+
+
+pcoarr <- as.data.frame(scores(envfit(mpcoa, geomsel), "vectors")) %>%
+  mutate(r2 = envfit(mpcoa, geomsel)[["vectors"]]$r,
+         p = envfit(mpcoa, geomsel)[["vectors"]]$pvals,
+         sig = ifelse(p < .05, "significant", "nonsignificant"))
+p1 <- ggplot() +
+  geom_vline(xintercept = 0,
+             linetype = 2) + 
+  geom_hline(yintercept = 0,
+             linetype = 2) + 
+  ggpubr::stat_chull(
+    data = pcoaxes,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+    ),
+    geom = "polygon",
+    alpha = .1,
+    linewidth = .6,
+    colour = "gray",
+    fill = "gray"
+  )+
+  geom_point(
+    data = pcoaxes,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2
+    ),
+    colour = "gray45",
+    alpha = .8
+  ) +
+  geom_segment(data = pcoarr ,
+               aes(x = 0,
+                   y = 0,
+                   xend = Dim1,
+                   yend = Dim2,
+                   linewidth = sqrt(r2)),
+               arrow = arrow(length = unit(0.30, "cm")))+
+  ggrepel::geom_text_repel(data = pcoarr,
+                           aes(x = Dim1,
+                               y = Dim2,
+                               label = rownames(pcoarr),
+                              size = sqrt(r2)),
+                           inherit.aes = FALSE)+
+  scale_linewidth_continuous(range = c(0.25,1))+
+  scale_size_continuous(range = c(2.8,4.2))+
+  scale_color_manual(values = pal)+
+  scale_fill_manual(values = pal)+
+  scale_x_continuous(limits = c(-7,7), expand = FALSE)+
+  scale_y_continuous(limits = c(-5,5), expand = FALSE)+
+  theme_light()+
+  labs(x = paste("Dim 1 :", var_axes[1], "%", sep = " "),
+       y = paste("Dim 2 :", var_axes[2], "%", sep = " "))+
+  theme(aspect.ratio = 1,
+        panel.background = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "none"
+        )
+p1
+# mfdalpha <- mFD::alpha.fd.multidim(sp_faxes_coord = scores(mpcoa),
+#                        asb_sp_w = as.matrix(geomcomm), verbose = FALSE)
+# 
+# mfd <- mfdalpha$functional_diversity_indices %>% 
+#   as.data.frame() %>% 
+#   rename_with(.fn = ~paste("m", .x, sep = "")) %>% 
+#   tibble::rownames_to_column("code") %>% 
+#   mutate(site = as.factor(stringr::str_sub(code, 1, -8)),
+#          point = as.factor(stringr::str_sub(code, 1, -6)),
+#          np = as.factor(stringr::str_sub(code, -6, -6)),
+#          year = as.factor(stringr::str_sub(code, -4)))
+```
+
+## Regional and local coralline nodule morphological trait variability
+
+When all observations at a site over time are considered, most trait syndromes are present across all beds. Each site represents at least 60 % of the regional trait pool being represented and the most functionally rich site occupying 85 % of the 5-dimensional trait space (subplots in Figure 2 – main ).
+
+```{r}
+#| fig-height: 6.5
+#| warning: false
+#| message: false
+#| echo: false
+#| label: fig-sitespace
+#| fig-cap: Regional coralline algae morphological trait diversity. Subplots represent the two first dimensions of the trait space with light grey polygons indicating the regional trait space and empty circles the species in the regional pool. Overlaid coloured polygons represent the trait space occupied by coralline algal nodules found at a given site over time, with filled coloured circles indicating these nodules.
+
+
+library(reshape)
+geomsite <- geomcomm %>%
+  pivot_longer(cols = everything(), values_to = "n", names_to = "sample") %>% 
+  left_join(geomsel %>% rownames_to_column("sample")) %>% 
+  left_join(geom %>%  select(site, sample))
+
+df <- data.frame()
+for (i in levels(geomsite$site)) {
+    df_i <- geomsite %>%
+      filter(site == i) %>%
+      filter(n > 0) %>%
+      select(sample, site, n) %>% 
+      left_join(pcoaxes)
+  df <- rbind(df, df_i)
+  df
+}
+
+df <- df %>%
+  mutate(AZ1 = n*Dim1,
+         AZ2 = n*Dim2) %>% 
+  group_by(site) %>%
+  mutate(C1 = sum(AZ1)/sum(n),
+         C2 = sum(AZ2)/sum(n)) %>% 
+  ungroup()
+  
+  
+ggplot() +
+  geom_vline(xintercept = 0,
+             linetype = 2) + 
+  geom_hline(yintercept = 0,
+             linetype = 2) + 
+  ggpubr::stat_chull(
+    data = pcoaxes %>% select(-site),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+    ),
+    colour = "gray",
+    fill = "gray",
+    geom = "polygon",
+    alpha = .2,
+    linewidth = .6
+  )+
+  geom_point(
+    data = pcoaxes %>% select(-site),
+    mapping = aes(
+      x = Dim1,
+      y = Dim2
+    ),
+    colour = "gray",
+    size = 1,
+    shape = 1,
+    alpha = .5
+  ) +
+  ggpubr::stat_chull(
+    data = df,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      fill = site,
+      colour = site,
+    ),
+    geom = "polygon",
+    alpha = .3,
+    linetype = 2,
+    linewidth = .4
+  ) +
+   geom_segment(
+    data = df,
+    aes(
+      x = C1,
+      y = C2,
+      xend = Dim1,
+      yend = Dim2,
+      colour = site
+      ),
+    linetype = 2,
+    linewidth = .2,
+    alpha = .8) +
+  geom_point(
+    data = df,
+    mapping = aes(
+      x = Dim1,
+      y = Dim2,
+      colour = site
+      # shape = year,
+    ),
+    size = 1,
+    alpha = .9
+  ) +
+    geom_point(
+    data = df,
+    mapping = aes(
+      x = C1,
+      y = C2,
+      # shape = year
+    ),
+    alpha = .9,
+    size = 1.5,
+    colour = "black"
+  ) +
+  scale_color_manual(values = pal)+
+  scale_fill_manual(values = pal)+
+  scale_x_continuous(limits = c(-7,7), expand = FALSE)+
+  scale_y_continuous(limits = c(-4.6,4.6), expand = FALSE)+
+  theme_light() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        legend.position = "none")+
+  facet_wrap(facets =  vars(site), nrow = 3)
+
+```
+
+```{r}
+#| include: false
+#code to get the base for the edited version of figure 2 of this annex
+closest_ids <- geom %>%
+  mutate(dist_to_mean = abs(convexity - mean(convexity, na.rm = TRUE)),
+         dist_to_min = abs(convexity - min(convexity)),
+         dist_to_max = abs(convexity - max(convexity)),
+         dist_to_half = abs(convexity - 0.5),
+         dist_to_quarter = abs(convexity - 0.25),
+         dist_to_tq = abs(convexity - 0.75)
+         ) 
+
+mean_ids <- closest_ids %>%  select(site, sample, dist_to_mean, vol, convexity) %>%
+   arrange(dist_to_mean) %>%
+   slice(1:5) 
+ 
+max_ids <- closest_ids %>%  select(site, sample, dist_to_max, vol, convexity) %>%
+   arrange(dist_to_max) %>%
+   slice(1:5) 
+ 
+min_ids <- closest_ids %>%  select(site, sample, dist_to_min, vol, convexity) %>%
+  arrange(dist_to_min) %>%
+  slice(1:5) 
+
+half_ids <- closest_ids %>%  select(site, sample, dist_to_half, vol, convexity) %>%
+  arrange(dist_to_half) %>%
+  slice(1:5) 
+quarter_ids <- closest_ids %>%  select(site, sample, dist_to_quarter, vol, convexity) %>%
+  arrange(dist_to_quarter) %>%
+  slice(1:5) 
+tq_ids <- closest_ids %>%  select(site, sample, dist_to_tq, vol, convexity) %>%
+  arrange(dist_to_tq) %>%
+  slice(1:5) 
+
+df_ids <- mean_ids %>% 
+  full_join(max_ids) %>% 
+  full_join(min_ids) %>% 
+  full_join(half_ids) %>% 
+  full_join(quarter_ids) %>% 
+  full_join(tq_ids) %>% 
+  mutate(y = rep(c(1:5), 6))
+  
+
+p <- ggplot(df_ids)+
+  geom_vline(xintercept = c(0.5,
+                            0.25, 
+                            0.75,
+                            max(closest_ids$convexity),
+                            mean(closest_ids$convexity),
+                            min(closest_ids$convexity)),
+             linetype = "dashed",
+             linewidth = c(.5, .5,.5, 1, 1, 1),
+             colour = c(rep("black",3), "darkred", "black", "darkred")) +
+  geom_point(aes(x = convexity, y = y, col = site))+
+  geom_text_repel(aes(x = convexity, y = y, label = sample, col = site))+
+  scale_color_manual(values = pal)+
+  theme_light() +
+  scale_x_continuous(breaks = c(0,
+                                min(closest_ids$convexity),
+                                0.25,
+                                mean(closest_ids$convexity),
+                                0.5,
+                                0.75,
+                                max(closest_ids$convexity)),
+                     labels = scales::number_format(accuracy = 0.01))+
+  theme(panel.grid = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "bottom"
+          )
+p
+```
+
+## Convexity variability in coralline algal nodules
+
+In order to better illustrate how differences in convexity translate to nodule morphology, nodules are plotted along a convexity gradient. Convexity captures a gradient from nodules with numerous and sparse branches (low convexity) to nodules with few to no branches (high convexity), with nodules with varying number of densely packed branches at intermediate values.
+
+![Regional convexity variability in coralline algal nodules. Red doted lines represent minimum and maximum observed convexity values, while the bold black dotted line represents the observed mean convexity value. For each convexity value shown, five nodules with the closest observed values are illustrated.](figures/convexity_gradient_edited.png){width="6.5in"}
+
+## References

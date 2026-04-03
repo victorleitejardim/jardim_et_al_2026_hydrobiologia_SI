@@ -1,0 +1,1238 @@
+---
+title: "Supplementary Information: Annex D – Structural Equation Modelling"
+subtitle: "Jardim et al. (2026). Trait-based insights into complexity–diversity relationships: different habitat complexity components drive niche diversity and community size. Hydrobiologia."
+header-includes:
+      - \usepackage{float}
+      - \floatplacement{table}{H}
+      - \usepackage{makecell}
+crossref:
+  fig-prefix: Figure\ D
+  fig-title: Figure\ D
+  subref-labels: alpha a
+  tbl-prefix: Table\ D
+  tbl-title: Table\ D
+format:
+  pdf:
+    documentclass: scrartcl
+    papersize: letter
+    mainfont: Times New Roman 
+    sansfont: Arial
+    fontsize: 12pt
+    geometry: margin=1in
+    fig-height: 5
+    fig-width: 6.5    
+    fig-pos: "H"
+    tbl-pos: "H"
+    colorlinks: true
+    urlcolor: red
+    toc: true
+editor: source
+bibliography: bibliography.bib
+execute: 
+  cache: refresh
+---
+
+```{r}
+#| include: false
+library(targets)
+library(dplyr)
+library(tidyr)
+library(ggExtra)
+library(paletteer)
+library(vegan)
+library(BAT)
+library(mFD)
+library(tibble)
+library(ade4)
+library(adegraphics)
+library(ggplot2)
+library(patchwork)
+library(ggrepel)
+library(plotly)
+library(sf)
+library(tmap)
+# library(cxhull)
+library(lme4)
+library(jtools)
+library(sandwich)
+library(fixest)
+library(broom)
+library(lmtest)
+library(pbkrtest)
+library(lavaan)
+library(piecewiseSEM)
+library(emmeans)
+library(DiagrammeR)
+library(stringr)
+library(ggfortify)
+library(car)
+library(reshape)
+library(kableExtra)
+source(here::here("R", "summs.R"))
+set.seed(1)
+```
+
+# Details on structural equation modelling
+
+To determine and quantify the direct and indirect pathways linking habitat complexity to diversity across changing environments, a pSEM approach was used [@lefcheck_piecewisesem_2016] . A set of causal path models was constructed from the hypothetical relationships identified in the literature among hydrosedimentary dynamics, habitat complexity facets of maerl and polychaete functional and taxonomic diversity (Figure 1 — main text, detailed in section ‘Theoretical causal pathways’).\
+Each observation (a sampling point at a given year, n = 90) was characterised in the pSEM in terms of 1) its position along the first axis of the hydrosedimentary stress PCA; 2) its median value for each habitat complexity metric — with nodule surface and nodule biomass as proxies of habitat amount, nodule convexity as a proxy of habitat geometry and nodule trait dispersion as a proxy of habitat diversity; and 3) total density and species richness of its polychaete assemblage as proxies of community size.\
+Details on the fit of each causal path model and final pSEM selection are described below.
+
+# Path models
+
+All path models were visually checked for linear model assumptions, and tested for homoscedasticity and normality of residuals.\
+Total density of polychaetes, nodule surface and nodule trait dispersion were log transformed, and nodule biomass was square root transformed to linearise relationships and meet model assumptions.\
+Convexity was also log-transformed; however, homoscedasticity and normality of residuals were not fully achieved for this variable within the piecewise structural equation model (pSEM). To assess the robustness of our results to this assumption violation, we fitted an alternative pSEM in which convexity was modelled as a response variable using a generalized linear model with a Gamma distribution and inverse link, applied to untransformed convexity values. Overall pSEM comparison based on Chi-squared statistics indicated similar global fit between the Gaussian and Gamma-based pSEMs. Focusing specifically on the convexity sub-model, predicted values from both approaches did not differ significantly (mean difference not significantly different from zero) and showed comparable predictive accuracy (RMSE and MAE; [@chai_root_2014]).\
+Because both approaches yielded equivalent predictions and model fit, we retained the Gaussian pSEM for the main analyses in order to facilitate comparison of standardized path coefficients across model components. Importantly, qualitative conclusions regarding the direction and relative strength of paths were consistent across both model formulations.\
+Following are the diagnostic plots and statistical tests for each path model, grouped by response variable.
+
+## Habitat amount
+
+### Biomass
+
+Diagnostic plots and tests for the path model $Biomass ∼ Hydrosedimentary \ stress$ on the raw and square-root transformed response variable. Normality of residuals is only met after square-root transformation.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots on raw response
+
+load(file = "data/semtable.RData")
+# biomasse
+lm_biom <- lm(formula = biomass ~  hydro, data = semtable)
+st_biom <- shapiro.test(resid(lm_biom)) # not normal
+ncv_biom <- ncvTest(lm_biom) #homogeneous
+autoplot(lm_biom)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots after square-root transformation
+
+lm_biom2 <- lm(formula = sqrt(biomass) ~  hydro, data = semtable)
+st_biom2 <- shapiro.test(resid(lm_biom2)) #normal
+ncv_biom2 <- ncvTest(lm_biom2) #homogeneous
+autoplot(lm_biom2)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Diagnostic tests for raw and transformed response
+
+knitr::kable(data.frame(Test = c(st_biom$method,
+                                 st_biom2$method,
+                                 ncv_biom$test, 
+                                 ncv_biom2$test),
+                        Model = c("Raw",
+                                  "Transformed",
+                                  "Raw",
+                                  "Transformed"),
+                        Statistic = c(st_biom$statistic,
+                                      st_biom2$statistic,
+                                      ncv_biom$ChiSquare,
+                                      ncv_biom2$ChiSquare),
+                        p.value = c(st_biom$p.value,
+                                      st_biom2$p.value,
+                                      ncv_biom$p,
+                                      ncv_biom2$p)) %>% 
+               mutate(Assumption = ifelse(p.value > .05, "Met", "Not met")),
+             digits = 2)
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model fit for raw and transformed response
+summs(list_lm = list(lm_biom, lm_biom2)) 
+  
+
+```
+
+### Nodule surface area
+
+Nodule surface area was log-transformed to linearise relationships in upstream models in which it is an explanatory variable. Nevertheless, we also compared model fit with raw and transformed variable for the downstream path model $Nodule\ surface\ area ∼ Hydrosedimentary \ stress \ +\ Surface convexity$. Model fit is globally the same among both models, but the transformation is kept to linearise upstream relationships.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots on raw response
+
+lm_surf <- lm(formula = surf ~ hydro + convexity, data = semtable)
+st_surf <- shapiro.test(resid(lm_surf)) # not normal
+ncv_surf <- ncvTest(lm_surf) #homogeneous
+autoplot(lm_surf)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots after square-root transformation
+
+lm_surf2 <- lm(formula = log(surf) ~  hydro + convexity, data = semtable)
+st_surf2 <- shapiro.test(resid(lm_surf2)) #normal
+ncv_surf2 <- ncvTest(lm_surf2) #homogeneous
+autoplot(lm_surf2)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Diagnostic tests for raw and transformed response
+
+knitr::kable(data.frame(Test = c(st_surf$method,
+                                 st_surf2$method,
+                                 ncv_surf$test, 
+                                 ncv_surf2$test),
+                        Model = c("Raw",
+                                  "Transformed",
+                                  "Raw",
+                                  "Transformed"),
+                        Statistic = c(st_surf$statistic,
+                                      st_surf2$statistic,
+                                      ncv_surf$ChiSquare,
+                                      ncv_surf2$ChiSquare),
+                        p.value = c(st_surf$p.value,
+                                      st_surf2$p.value,
+                                      ncv_surf$p,
+                                      ncv_surf2$p)) %>% 
+               mutate(Assumption = ifelse(p.value > .05, "Met", "Not met")),
+             digits = 2) 
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model fit for raw and transformed response
+
+summs(list_lm = list(lm_surf, lm_surf2)) 
+  
+```
+
+## Habitat geometry
+
+Diagnostic plots and tests for the path model $Convexity ∼ Hydrosedimentary \ stress$ on the raw and transformed response variable. Even after transformations, linear model assumptions were not met. Therefore, an alternative generalized linear model (GLM) with a Gamma distribution and inverse link was fitted to better capture the nonlinear, hyperbolic and asymptotic effects of hydrosedimentary stress. To assess whether the Gamma model provided a meaningfully different predictive outcome than the Gaussian model, we compared the predicted values from both models using paired predictions on the same data. Because the mean difference between predictions was not statistically significant, and predictive accuracy (RMSE/MAE) was similar between models, the Gaussian model was retained for the pSEM to allow comparison of standardized path coefficients (Supplementary Information).
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots on raw response
+
+lm_conv <- lm(formula = convexity ~ hydro, data = semtable)
+st_conv <- shapiro.test(resid(lm_conv)) # not normal
+ncv_conv <- ncvTest(lm_conv) #homogeneous
+autoplot(lm_conv)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots after log transformation
+
+lm_conv2 <- lm(formula = log(convexity) ~  hydro, data = semtable)
+st_conv2 <- shapiro.test(resid(lm_conv2)) #normal
+ncv_conv2 <- ncvTest(lm_conv2) #homogeneous
+autoplot(lm_conv2)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots after square-root transformation
+
+lm_conv3 <- lm(formula = sqrt(convexity) ~  hydro, data = semtable)
+st_conv3 <- shapiro.test(resid(lm_conv3)) #normal
+ncv_conv3 <- ncvTest(lm_conv3) #homogeneous
+autoplot(lm_conv3)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Diagnostic tests for raw and transformed response
+
+knitr::kable(data.frame(Test = c(st_conv$method,
+                                 st_conv2$method,
+                                 st_conv3$method,
+                                 ncv_conv$test, 
+                                 ncv_conv2$test,
+                                 ncv_conv3$test),
+                        Model = c("Raw",
+                                  "Log-transformed",
+                                  "Square root-transformed",
+                                  "Raw",
+                                  "Log-transformed",
+                                  "Square root-transformed"),
+                        Statistic = c(st_conv$statistic,
+                                      st_conv2$statistic,
+                                      st_conv3$statistic,
+                                      ncv_conv$ChiSquare,
+                                      ncv_conv2$ChiSquare,
+                                      ncv_conv3$ChiSquare),
+                        p.value = c(st_conv$p.value,
+                                      st_conv2$p.value,
+                                    st_conv3$p.value,
+                                      ncv_conv$p,
+                                      ncv_conv2$p,
+                                      ncv_conv3$p)) %>% 
+               mutate(Assumption = ifelse(p.value > .05, "Met", "Not met")),
+             digits = 2)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Comparison between Gamma glm (dashed line) and gaussian lm (full line)
+# fit a glm, since convexity quickly decreases 
+ggplot(semtable, aes(x = hydro,
+                     y = convexity,
+                     col = site))+
+  geom_point()+
+  geom_smooth(colour = "grey25",
+              method = "glm",
+              fullrange = TRUE,
+              method.args = list(family = Gamma(link = "inverse")),
+              linetype = 2,
+              alpha =.2)+
+  geom_smooth(colour = "grey25",
+              method = "lm",
+              fullrange = TRUE,
+              alpha = .2,
+              linetype = 1)+
+  theme_light()
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots of Gamma glm with inverse link
+glm_conv <- glm(convexity ~ hydro ,
+               family = Gamma(link = "inverse"),
+               data = semtable)
+sim <- DHARMa::simulateResiduals(glm_conv, plot = TRUE)
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model fit of linear models with raw and transformed response and of generalised linear model with gamma distributed errors and inverse link
+
+summs(list(lm_conv,
+  lm_conv2,
+  lm_conv3,
+  glm_conv))
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Predicted values from Gaussian lm and Gamma glm
+pred_lm <- predict(lm_conv, newdata = semtable, type = "response")
+pred_gamma <- predict(glm_conv, newdata = semtable, type = "response")
+df_pred <- data.frame(lm = pred_lm, gamma = pred_gamma)
+
+tt <- t.test(pred_lm, pred_gamma, paired = TRUE)
+wt <- wilcox.test(pred_lm, pred_gamma, paired = TRUE)
+
+test_df <- data.frame(Test = c(tt$method,
+                               wt$method),
+                      Statistic = c(tt$statistic,
+                                    wt$statistic),
+                      df = c(tt$parameter,
+                             wt$parameter),
+                      p.value = c(tt$p.value,
+                                  wt$p.value))
+
+ggplot(df_pred, aes(x = lm,
+                     y = gamma))+
+  geom_point()+
+  geom_smooth(colour = "grey25",
+              method = "lm")+
+  theme_light()+
+  theme(aspect.ratio = 1)
+
+
+
+rmse_lm <- sqrt(mean((semtable$convexity - pred_lm)^2))
+rmse_gamma <- sqrt(mean((semtable$convexity - pred_gamma)^2))
+
+mae_lm <- mean(abs(semtable$convexity - pred_lm))
+mae_gamma <- mean(abs(semtable$convexity - pred_gamma))
+
+rmse_df <- data.frame(Statistic = c("MAE",
+                                    "RMSE"),
+                      LM = c(mae_lm,
+                             rmse_lm),
+                      GLM = c(mae_gamma,
+                              rmse_gamma)) %>% 
+  mutate(Diff = abs(LM-GLM))
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Differences between predicted values from lm and glm
+
+knitr::kable(test_df, digits = 3, row.names = FALSE) 
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Differences in predictive power from lm and glm
+knitr::kable(rmse_df,
+             digits = 3)
+  
+```
+
+## Habitat diversity
+
+Diagnostic plots and tests for the path model $Nodule \ trait \ dispersion ∼ Hydrosedimentary \ stress$ with raw and first degree polynomial response variable.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots on raw response
+
+polymfdis <- poly(log(semtable$mfdis),2)
+semtable <- semtable %>%
+  mutate(mfdis_1 = polymfdis[,1],
+         mfdis_2 = polymfdis[,2])
+# Maerl functional dispersion = habitat diversity
+lm_mfdis <- lm(formula = mfdis ~ hydro, data = semtable)
+st_mfdis <- shapiro.test(resid(lm_mfdis)) # not normal
+ncv_mfdis <- ncvTest(lm_mfdis) #homogeneous
+autoplot(lm_mfdis)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots first dregree polynomial
+
+lm_mfdis2 <- lm(formula = mfdis_1 ~  hydro , data = semtable)
+st_mfdis2 <- shapiro.test(resid(lm_mfdis2)) #normal
+ncv_mfdis2 <- ncvTest(lm_mfdis2) #homogeneous
+autoplot(lm_mfdis2)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Diagnostic tests for raw and transformed response
+
+knitr::kable(data.frame(Test = c(st_mfdis$method,
+                                 st_mfdis2$method,
+                                 ncv_mfdis$test, 
+                                 ncv_mfdis2$test),
+                        Model = c("Raw",
+                                  "First-degree polynomial",
+                                  "Raw",
+                                  "First-degree polynomial"),
+                        Statistic = c(st_mfdis$statistic,
+                                      st_mfdis2$statistic,
+                                      ncv_mfdis$ChiSquare,
+                                      ncv_mfdis2$ChiSquare),
+                        p.value = c(st_mfdis$p.value,
+                                      st_mfdis2$p.value,
+                                      ncv_mfdis$p,
+                                      ncv_mfdis2$p)) %>% 
+               mutate(Assumption = ifelse(p.value > .05, "Met", "Not met")),
+             digits = 2)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model fit of linear models with raw and transformed response
+
+summs(list(lm_mfdis,lm_mfdis2))  
+  
+
+```
+
+## Functional diversity
+
+### Functional identity
+
+Diagnostic plots and tests for the path model $Functional \ identity ∼ Hydrosedimentary \ stress\ + \ Habitat\ amount \ +\ Habitat\ geometry\ +\ Habitat\ diversity$. All models respected linear model assumptions. Model fit among models containing raw values for nodule morphological trait dispersion (mfdis), only the first order polynomial of nodule trait dispersion, and both polynomials are shown.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots
+
+lm_fide <- lm(formula = fide_Dim1 ~  hydro  + mfdis + convexity + log(surf) + sqrt(biomass), data = semtable)
+st_fide <- shapiro.test(resid(lm_fide)) # normal
+ncv_fide <- ncvTest(lm_fide) # homogeneous
+autoplot(lm_fide)
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+lm_fide1 <- lm(formula = fide_Dim1 ~  hydro  + mfdis_1 + convexity + log(surf) + sqrt(biomass), data = semtable)
+st_fide1 <- shapiro.test(resid(lm_fide1)) # normal
+ncv_fide1 <- ncvTest(lm_fide1)
+
+
+lm_fide2 <- lm(formula = fide_Dim1 ~  hydro  + mfdis_1 + mfdis_2 + convexity + log(surf) + sqrt(biomass), data = semtable)
+st_fide2 <- shapiro.test(resid(lm_fide2)) # normal
+ncv_fide2 <- ncvTest(lm_fide2)
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Diagnostic tests for raw and transformed response
+
+knitr::kable(data.frame(Test = c(st_fide$method,
+                                 st_fide1$method,
+                                 st_fide2$method,
+                                 ncv_fide$test, 
+                                 ncv_fide1$test,
+                                 ncv_fide2$test),
+                        Model = rep(c(deparse1(lm_fide$call$formula, width.cutoff = 20),
+                                  deparse1(lm_fide1$call$formula, width.cutoff = 20),
+                                  deparse1(lm_fide2$call$formula, width.cutoff = 20)),2),
+                        Statistic = c(st_fide$statistic,
+                                      st_fide1$statistic,
+                                      st_fide2$statistic,
+                                      ncv_fide$ChiSquare,
+                                      ncv_fide1$ChiSquare,
+                                      ncv_fide2$ChiSquare),
+                        p.value = c(st_fide$p.value,
+                                    st_fide1$p.value,
+                                    st_fide2$p.value,
+                                    ncv_fide$p,
+                                    ncv_fide1$p,
+                                    ncv_fide2$p)) %>% 
+               mutate(Assumption = ifelse(p.value > .05, "Met", "Not met")),
+             digits = 2)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model fit of linear models with raw and polynomial terms of nodule trait dispersion
+summs(list(
+  lm_fide,
+  lm_fide1,
+  lm_fide2),names = c("","\\makecell{Raw\\\\response}", "\\makecell{1st order\\\\polynomial\\\\predictors}", "\\makecell{1st and 2nd\\\\order polynomial\\\\predictors}"))
+  
+
+```
+
+### Functional evenness
+
+Diagnostic plots and tests for the path model $Functional \ identity ∼ Hydrosedimentary \ stress\ + \ Habitat\ amount \ +\ Habitat\ geometry\ +\ Habitat\ diversity$.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots on raw response
+
+
+lm_feve <- lm(formula = feve ~ hydro  + mfdis + convexity + sqrt(biomass) + log(surf), data = semtable)
+autoplot(lm_feve)
+st_feve <- shapiro.test(resid(lm_feve)) #not normal
+ncv_feve <- ncvTest(lm_feve) #homogeneous
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots first dregree polynomial
+polyfeve <- poly(semtable$feve, 2)
+semtable <- semtable %>%
+  mutate(feve_1 = polyfeve[,1],
+         feve_2 = polyfeve[,2])
+
+lm_feve1 <- lm(formula = feve_1 ~ hydro  + mfdis + convexity + sqrt(biomass) + log(surf), data = semtable)
+autoplot(lm_feve1)
+st_feve1 <- shapiro.test(resid(lm_feve1)) 
+ncv_feve1 <- ncvTest(lm_feve1)
+```
+
+```{r}
+#| echo: false
+#| warning: false
+lm_feve2 <- lm(formula = feve_1 ~ hydro  + mfdis_1 + convexity + sqrt(biomass) + log(surf), data = semtable)
+st_feve2 <-shapiro.test(resid(lm_feve2)) #norma
+ncv_feve2 <- ncvTest(lm_feve2) #homogeneous
+
+lm_feve3 <- lm(formula = feve_1 ~ hydro  + mfdis_1 + mfdis_2 + convexity + sqrt(biomass) + log(surf), data = semtable)
+st_feve3 <- shapiro.test(resid(lm_feve3)) #not normal
+ncv_feve3 <- ncvTest(lm_feve3) #homogeneou
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Diagnostic tests for raw and transformed response
+
+knitr::kable(data.frame(Test = c(st_feve$method,
+                                 st_feve1$method,
+                                 st_feve2$method,
+                                 st_feve3$method,
+                                 ncv_feve$test, 
+                                 ncv_feve1$test,
+                                 ncv_feve2$test,
+                                 ncv_feve3$test),
+                        Model = rep(c(deparse1(lm_feve$call$formula),
+                                  deparse1(lm_feve1$call$formula),
+                                  deparse1(lm_feve2$call$formula),
+                                  deparse1(lm_feve3$call$formula)),2),
+                        Statistic = c(st_feve$statistic,
+                                      st_feve1$statistic,
+                                      st_feve2$statistic,
+                                      st_feve3$statistic,
+                                      ncv_feve$ChiSquare,
+                                      ncv_feve1$ChiSquare,
+                                      ncv_feve2$ChiSquare,
+                                      ncv_feve3$ChiSquare),
+                        p.value = c(st_feve$p.value,
+                                    st_feve1$p.value,
+                                    st_feve2$p.value,
+                                    st_feve3$p.value,
+                                    ncv_feve$p,
+                                    ncv_feve1$p,
+                                    ncv_feve2$p,
+                                    ncv_feve3$p)) %>% 
+               mutate(Assumption = ifelse(p.value > .05, "Met", "Not met")),
+             digits = 2)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model fit of linear models with raw and transformed response and polynomial terms for nodule trait dispersion
+summs(list(
+  lm_feve,
+  lm_feve1,
+  lm_feve2,
+  lm_feve3),
+  names = c("","\\makecell{Raw\\\\response}", "\\makecell{1st order\\\\polynomial\\\\response}", "\\makecell{1st order\\\\polynomial\\\\predictors}", "\\makecell{1st and 2nd\\\\order polynomial\\\\predictors}"))  
+  
+
+```
+
+## Community size
+
+### Total polychaete density
+
+Diagnostic plots and tests for the path model $Polychaete \ density ∼ Hydrosedimentary \ stress\ + \ Habitat\ amount \ +\ Habitat\ geometry\ +\ Habitat\ diversity\ +\ Trait\ diversity$.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots on raw response
+
+lm_dens <- lm(formula = dens ~  hydro  + mfdis + convexity + sqrt(biomass) + log(surf) + fide_Dim1 + feve, data = semtable)
+autoplot(lm_dens)
+st_dens <- shapiro.test(resid(lm_dens))
+ncv_dens <- ncvTest(lm_dens) 
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots log-transformed response
+lm_dens1 <- lm(formula = log(dens) ~  hydro  + mfdis + convexity + sqrt(biomass) + log(surf) + fide_Dim1 + feve, data = semtable)
+autoplot(lm_dens1)
+
+st_dens1 <- shapiro.test(resid(lm_dens1)) 
+ncv_dens1 <- ncvTest(lm_dens1) 
+```
+
+```{r}
+#| echo: false
+#| warning: false
+lm_dens2 <- lm(formula = log(dens) ~  hydro + mfdis_1 + convexity + sqrt(biomass) + log(surf) + fide_Dim1 + feve_1, data = semtable)
+st_dens2 <- shapiro.test(resid(lm_dens2)) 
+ncv_dens2 <- ncvTest(lm_dens2) 
+
+lm_dens3 <- lm(formula = log(dens) ~  hydro + mfdis_1 + mfdis_2 + convexity + sqrt(biomass) + log(surf) + fide_Dim1 + feve_1 + feve_2, data = semtable)
+st_dens3 <- shapiro.test(resid(lm_dens3)) 
+ncv_dens3 <- ncvTest(lm_dens3) 
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Diagnostic tests for raw and transformed response
+
+knitr::kable(data.frame(
+  Test = c(
+    st_dens$method,
+    st_dens1$method,
+    st_dens2$method,
+    st_dens3$method,
+    ncv_dens$test,
+    ncv_dens1$test,
+    ncv_dens2$test,
+    ncv_dens3$test
+  ),
+  Model = rep(
+    c(
+      deparse1(lm_dens$call$formula, width.cutoff = 20),
+      deparse1(lm_dens1$call$formula, width.cutoff = 20),
+      deparse1(lm_dens2$call$formula, width.cutoff = 20),
+      deparse1(lm_dens3$call$formula, width.cutoff = 20)
+    ), 2),
+  Statistic = c(
+      st_dens$statistic,
+      st_dens1$statistic,
+      st_dens2$statistic,
+      st_dens3$statistic,
+      ncv_dens$ChiSquare,
+      ncv_dens1$ChiSquare,
+      ncv_dens2$ChiSquare,
+      ncv_dens3$ChiSquare
+    ),
+  p.value = c(
+      st_dens$p.value,
+      st_dens1$p.value,
+      st_dens2$p.value,
+      st_dens3$p.value,
+      ncv_dens$p,
+      ncv_dens1$p,
+      ncv_dens2$p,
+      ncv_dens3$p
+    )
+  ) %>%
+    mutate(Assumption = ifelse(p.value > .05, "Met", "Not met")),
+  digits = 2
+)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model fit of linear models with raw and transformed response and raw and polynomial terms for functional eveness and nodule trait dispersion
+summs(list(
+  lm_dens,
+  lm_dens1,
+  lm_dens2,
+  lm_dens3),
+  names = c("","\\makecell{Raw\\\\response}", "\\makecell{Transformed\\\\response}", "\\makecell{1st order\\\\polynomial\\\\predictors}", "\\makecell{1st and 2nd\\\\order polynomial\\\\predictors}"))  
+  
+
+```
+
+### Polychaete richness
+
+Diagnostic plots and tests for the path model $Polychaete \ richness ∼ Hydrosedimentary \ stress\ + \ Habitat\ amount \ +\ Habitat\ geometry\ +\ Habitat\ diversity\ +\ Trait\ diversity+\ Polychaete\ density$.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig-cap: Diagnostic plots on raw response
+
+lm_rich <- lm(formula = sp_richn ~  hydro  + mfdis + convexity + sqrt(biomass) + log(surf) + fide_Dim1 + feve + log(dens), data = semtable)
+autoplot(lm_rich)
+st_rich <- shapiro.test(resid(lm_rich)) # normal
+ncv_rich <- ncvTest(lm_rich) # homogeneous
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+lm_rich1 <- lm(formula = sp_richn ~  hydro  + mfdis_1 + convexity + sqrt(biomass) + log(surf) + fide_Dim1 + feve_1 + log(dens), data = semtable)
+st_rich1 <- shapiro.test(resid(lm_rich1)) # normal
+ncv_rich1 <- ncvTest(lm_rich1) # homogeneous
+
+lm_rich2 <- lm(formula = sp_richn ~  hydro  + mfdis_1 + mfdis_2 + convexity + sqrt(biomass) + log(surf) + fide_Dim1 + feve_1 + feve_2 + log(dens), data = semtable)
+st_rich2 <-shapiro.test(resid(lm_rich2)) 
+ncv_rich2 <- ncvTest(lm_rich2) 
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Diagnostic tests for models with raw and polynomial terms for explanatory variables
+
+knitr::kable(data.frame(Test = c(st_rich$method,
+                                 st_rich1$method,
+                                 st_rich2$method,
+                                 ncv_rich$test, 
+                                 ncv_rich1$test,
+                                 ncv_rich2$test),
+                        Model = rep(c(deparse1(lm_rich$call$formula, width.cutoff = 20),
+                                  deparse1(lm_rich1$call$formula, width.cutoff = 20),
+                                  deparse1(lm_rich2$call$formula, width.cutoff = 20)),2),
+                        Statistic = c(st_rich$statistic,
+                                      st_rich1$statistic,
+                                      st_rich2$statistic,
+                                      ncv_rich$ChiSquare,
+                                      ncv_rich1$ChiSquare,
+                                      ncv_rich2$ChiSquare),
+                        p.value = c(st_rich$p.value,
+                                    st_rich1$p.value,
+                                    st_rich2$p.value,
+                                    ncv_rich$p,
+                                    ncv_rich1$p,
+                                    ncv_rich2$p)) %>% 
+               mutate(Assumption = ifelse(p.value > .05, "Met", "Not met")),
+             digits = 2)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model fit of linear models with raw and polynomial terms for explanatory variables
+summs(list(
+  lm_rich,
+  lm_rich1,
+  lm_rich2),
+  names = c("","\\makecell{Raw\\\\response}", "\\makecell{1st order\\\\polynomial\\\\predictors}", "\\makecell{1st and 2nd\\\\order polynomial\\\\predictors}"))  
+  
+
+```
+
+# SEM fit and selection
+
+Global pSEM goodness of fit was assessed through Fisher's C statistic, an Akaike Information Criterion based on directed separation tests (AICd-sep; [@shipley_aic_2013]), as well as the generalised maximum-likelihood chi-square statistic (ꭓ2ML) and full-model AICML statistic for piecewise SEMs [@shipley_generalized_2020]. Initial models would only contain the hypothetical causal paths, and missing paths or correlated errors were incorporated only when identified as significant by directed separation tests and deemed ecologically relevant. Because both approaches yielded equivalent predictions and model fit, we retained the Gaussian pSEM 3 including polynomial terms for the main analyses in order to facilitate comparison of standardized path coefficients across model components while still taking into account significant non-linear relationships involving nodule trait dispersion (habitat diversity) and functional evenness.
+
+```{r}
+#| echo: false
+#| warning: false
+#| output: false
+
+#only lms
+
+#raw mfdis and raw feve
+sem1 <- psem(lm_rich,
+             lm_dens1,
+             lm_feve,
+             lm_fide,
+             lm_mfdis,
+             lm_conv,
+             lm_biom2,
+             lm_surf2,
+             log(surf) %~~% sqrt(biomass),
+             feve %~~% fide_Dim1,
+             mfdis %~~% convexity,
+             data = semtable)
+summ1 <- summary(sem1)
+
+
+#with linear term polynomials
+sem2 <- psem(lm_rich1,
+             lm_dens2,
+             lm_feve2,
+             lm_fide1,
+             lm_mfdis2,
+             lm_conv,
+             lm_biom2,
+             lm_surf2,
+             log(surf) %~~% sqrt(biomass),
+             feve_1 %~~% fide_Dim1,
+             mfdis_1 %~~% convexity,
+             data = semtable
+            )
+summ2 <- summary(sem2)
+
+
+# Model with both linear and polynomial terms
+sem3 <- psem(lm_rich2,
+             lm_dens3,
+             lm_feve3,
+             lm_fide2,
+             lm_mfdis2,
+             lm_conv,
+             lm_biom2,
+             lm_surf2,
+             log(surf) %~~% sqrt(biomass),
+             feve_1 %~~% fide_Dim1,
+             mfdis_1 %~~% convexity,
+             data = semtable
+            )
+summ3 <- summary(sem3)
+
+# LLchisq(sem1)
+# LLchisq(sem2)
+# round(LLchisq(sem3),2)
+# fisherC(sem1)
+# fisherC(sem2)
+# round(fisherC(sem3),2)
+# rsquared(sem1)
+# rsquared(sem2)
+# rsquared(sem3)
+
+# AIC(sem1,sem2, sem3)
+# anova(sem1, sem2, sem3)
+sem4 <- psem(lm_rich2,
+             lm_dens3,
+             lm_feve3,
+             lm_fide2,
+             lm_mfdis2,
+             glm_conv,
+             lm_biom2,
+             lm_surf2,
+             log(surf) %~~% sqrt(biomass),
+             feve_1 %~~% fide_Dim1,
+             mfdis_1 %~~% convexity,
+             data = semtable
+            )
+
+
+summ4 <- knitr::kable(piecewiseSEM::unstdCoefs(sem4))
+
+
+```
+
+## pSEM 1
+
+pSEM fit for the model without polynomial terms:
+
+*`{r} str_remove_all(string = deparse1(lm_rich$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)")`*
+
+*`{r} str_remove_all(string = deparse1(lm_dens1$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_feve$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)")`*
+
+*`{r} str_remove_all(string = deparse1(lm_fide$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_mfdis$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_conv$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_biom2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_surf2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} as.character(sem1[[9]])`*
+
+*`{r} as.character(sem1[[10]])`*
+
+*`{r} as.character(sem1[[11]])`*
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Tests of directed separation
+knitr::kable(summ1$dTable)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Global goodness-of-fit
+knitr::kable(list(summ1$ChiSq, summ1$Cstat))  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model coefficients
+
+knitr::kable(summ1$coefficients)  
+  
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Individual R-squared
+
+knitr::kable(summ1$R2)  
+  
+```
+
+## pSEM 2
+
+pSEM fit for the model containing only first order orthogonal polynomial terms:
+
+*`{r} str_remove_all(string = deparse1(lm_rich1$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)")`*
+
+*`{r} str_remove_all(string = deparse1(lm_dens2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_feve2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)")`*
+
+*`{r} str_remove_all(string = deparse1(lm_fide1$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_mfdis2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_conv$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_biom2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_surf2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} as.character(sem2[[9]])`*
+
+*`{r} as.character(sem2[[10]])`*
+
+*`{r} as.character(sem2[[11]])`*
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Tests of directed separation
+knitr::kable(summ2$dTable)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Global goodness-of-fit
+knitr::kable(list(summ2$ChiSq, summ2$Cstat))  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model coefficients
+
+knitr::kable(summ2$coefficients)  
+  
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Individual R-squared
+
+knitr::kable(summ2$R2)  
+  
+```
+
+## pSEM 3 (final selected model)
+
+pSEM fit for the model containing both first and second order orthogonal polynomial terms:\
+*`{r} str_remove_all(string = deparse1(lm_rich2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)")`*
+
+*`{r} str_remove_all(string = deparse1(lm_dens3$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_feve3$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)")`*
+
+*`{r} str_remove_all(string = deparse1(lm_fide2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_mfdis2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_conv$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_biom2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_surf2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} as.character(sem3[[9]])`*
+
+*`{r} as.character(sem3[[10]])`*
+
+*`{r} as.character(sem3[[11]])`*
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Tests of directed separation
+knitr::kable(summ3$dTable)  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Global goodness-of-fit
+knitr::kable(list(summ3$ChiSq, summ3$Cstat))  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model coefficients
+
+knitr::kable(summ3$coefficients)  
+  
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Individual R-squared
+
+knitr::kable(summ3$R2)  
+  
+```
+
+## pSEM 4
+
+pSEM fit for the model containing the generalised linear path model for nodule convexity and both first and second order orthogonal polynomial terms:\
+*`{r} str_remove_all(string = deparse1(lm_rich2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)")`*
+
+*`{r} str_remove_all(string = deparse1(lm_dens3$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_feve3$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)")`*
+
+*`{r} str_remove_all(string = deparse1(lm_fide2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_mfdis2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(glm_conv$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_biom2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} str_remove_all(string = deparse1(lm_surf2$call, width.cutoff = 20), pattern = "lm\\(formula = |glm\\(formula = |, data = semtable\\)|data = semtable\\)|,")`*
+
+*`{r} as.character(sem4[[9]])`*
+
+*`{r} as.character(sem4[[10]])`*
+
+*`{r} as.character(sem4[[11]])`*
+
+```{r}
+#| echo: false
+#| warning: false
+#| output: false
+#| tbl-cap: Tests of directed separation
+knitr::kable(dSep(sem4))  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Global goodness-of-fit
+
+
+knitr::kable(list(LLchisq(sem4), fisherC(sem4)))  
+  
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Model coefficients
+
+summ4
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+coefs3 <- as.data.frame(summ3$coefficients)
+
+mfdis_eff <-  abs(coefs3$Std.Estimate[coefs3$Response == "log(dens)" &
+                                   coefs3$Predictor == "mfdis_1"])+abs(coefs3$Std.Estimate[coefs3$Response == "log(dens)" &
+                                   coefs3$Predictor == "mfdis_2"])
+feve_eff <-  abs(coefs3$Std.Estimate[coefs3$Response == "log(dens)" &
+                                   coefs3$Predictor == "feve_1"])+abs(coefs3$Std.Estimate[coefs3$Response == "log(dens)" &
+                                   coefs3$Predictor == "feve_2"])
+
+```
+
+## Direct, Indirect and Net effects
+
+Besides the direct effects reported, indirect and net effects can be calculated in piecewise SEM. Indirect effects can be quantified by the product of standard coefficients of each significant intermediate path in a pathway between a predictor and a response variable. If there are multiple pathways from a predictor and a response variable, the indirect is the sum of the products of each pathway.\
+In order to estimate the overall magnitude of the non-linear effects of nodule trait dispersion and functional evenness on total density, the sum of the absolute value of the standard coefficients of both 1st and 2nd order polynomial terms was taken (***`{r} round(mfdis_eff, 2)`*** for nodule trait dispersion, and ***`{r} round(feve_eff, 2)`*** for functional evenness). Because those effects are neither positive nor negative, intermediate and net effects are not reported for pathways that include paths upstream nodule trait dispersion or functional evenness (e.g. those leading to total density and species richness).
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: Direct, Indirect and Net effects
+effs_df <- data.frame(
+  Response = c("Nodule surface area"),
+  Predictor = c("Hydrosedimentary stress"),
+  Direct = c(coefs3$Std.Estimate[coefs3$Response == "log(surf)" &
+                                   coefs3$Predictor == "hydro"]),
+  Indirect = c(coefs3$Std.Estimate[coefs3$Response == "convexity" &
+                                     coefs3$Predictor == "hydro"] * coefs3$Std.Estimate[coefs3$Response == "log(surf)" &
+                                                                                          coefs3$Predictor == "convexity"])
+) %>%
+  add_row(
+    Response = "Functional identity",
+    Predictor = "Hydrosedimentary stress",
+    Direct = coefs3$Std.Estimate[coefs3$Response == "fide_Dim1" &
+                                     coefs3$Predictor == "hydro"],
+    Indirect = coefs3$Std.Estimate[coefs3$Response == "convexity" &
+                                       coefs3$Predictor == "hydro"] * coefs3$Std.Estimate[coefs3$Response == "fide_Dim1" &
+                                                                                            coefs3$Predictor == "convexity"]+coefs3$Std.Estimate[coefs3$Response == "sqrt(biomass)" &
+                                       coefs3$Predictor == "hydro"] * coefs3$Std.Estimate[coefs3$Response == "fide_Dim1" &
+                                                                                            coefs3$Predictor == "sqrt(biomass)"]
+  ) %>%
+  add_row(
+    Response = "Functional evenness",
+    Predictor = "Hydrosedimentary stress",
+    Direct = coefs3$Std.Estimate[coefs3$Response == "feve_1" &
+                                     coefs3$Predictor == "hydro"],
+    Indirect = coefs3$Std.Estimate[coefs3$Response == "convexity" &
+                                       coefs3$Predictor == "hydro"] * coefs3$Std.Estimate[coefs3$Response == "feve_1" &
+                                                                                            coefs3$Predictor == "convexity"]+coefs3$Std.Estimate[coefs3$Response == "log(surf)" &
+                                       coefs3$Predictor == "hydro"] * coefs3$Std.Estimate[coefs3$Response == "feve_1" &
+                                                                                            coefs3$Predictor == "log(surf)"]
+  ) %>%
+  add_row(
+    Response = "Functional evenness",
+    Predictor = "Nodule convexity",
+    Direct = coefs3$Std.Estimate[coefs3$Response == "feve_1" &
+                                     coefs3$Predictor == "convexity"],
+    Indirect =  coefs3$Std.Estimate[coefs3$Response == "log(surf)" &
+                                     coefs3$Predictor == "convexity"]*coefs3$Std.Estimate[coefs3$Response == "feve_1" &
+                                     coefs3$Predictor == "log(surf)"]) %>%
+  mutate(Net = Indirect + Direct)
+
+kable(effs_df, digits = 2)
+```
+## Shape of significant non-linear relationships
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: "Marginal effects of Functional evenness on Community size (total density of polychaetes). The shape of this relationship is unimodal."
+plot(ggeffects::ggpredict(lm(formula = log(dens) ~ hydro + poly(mfdis,2)+ convexity + 
+    sqrt(biomass) + log(surf) + fide_Dim1 + poly(feve, 2), 
+    data = semtable),
+    terms = "feve",
+    back_transform = TRUE))+
+  scale_y_log10()+
+  theme(aspect.ratio = 1)+
+  labs(y = "Total polychaete density (log scale)",
+       x = "Functional evenness",
+       title = "")
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| tbl-cap: "Marginal effects of Nodule trait dispersion on Community size (total density of polychaetes). Community size slightly increases at lower levels of nodule trait dispersion, but rapidly decrease at higher ones."
+plot(ggeffects::ggpredict(lm(formula = log(dens) ~ hydro + poly(mfdis,2)+ convexity + 
+    sqrt(biomass) + log(surf) + fide_Dim1 + poly(feve, 2), 
+    data = semtable),
+    terms = "mfdis",
+    back_transform = TRUE))+
+  scale_y_log10()+
+  theme_light()+
+  theme(aspect.ratio = 1)+
+  labs(y = "Total polychaete density (log scale)",
+       x = "Nodule trait dispersion",
+       title = "")
+```
+## References
